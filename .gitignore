@@ -1,1 +1,8 @@
 /.metadata/
+*.metadata/
+*GeneratedBarFiles/
+GeneratedBarFiles/
+*/GeneratedBarFiles/
+
+
+*.lock

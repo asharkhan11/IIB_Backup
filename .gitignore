@@ -1,8 +1,0 @@
-# Exclude workspace metadata and temporary files
-*.metadata/
-*GeneratedBarFiles/
-GeneratedBarFiles/
-*/GeneratedBarFiles/
-.metadata/
-
-*.lock
