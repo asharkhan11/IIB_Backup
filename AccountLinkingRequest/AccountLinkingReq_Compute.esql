@@ -1,0 +1,109 @@
+
+
+
+
+DECLARE var_path EXTERNAL CHARACTER;
+DECLARE var BOOLEAN;
+
+DECLARE dsn CHARACTER '';
+DECLARE bank_code CHARACTER '';
+DECLARE schema_name CHARACTER '';
+
+CREATE COMPUTE MODULE AccountLinkingReq_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+
+		CALL init_log4j(var_path) INTO var;
+		CALL write_log(MessageFlowLabel,'acc_req','INFO','REQUEST : '|| CAST(ASBITSTREAM(InputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;
+		IF CONTAINS(InputRoot.HTTPInputHeader."X-Original-HTTP-Command", 'POST') THEN
+
+			IF FIELDNAME(InputRoot.JSON.Data.[1]) = 'bankId' AND FIELDNAME(InputRoot.JSON.Data.[2]) = 'mobileNo' AND FIELDNAME(InputRoot.JSON.Data.[3]) = 'accNo' AND InputRoot.JSON.Data.[4] IS NULL THEN
+				--generate 6 digit OTP
+				DECLARE otp INTEGER;
+				SET otp = CAST( ROUND(RAND()*1000000, 0) AS INTEGER);
+				--generate reference id
+				DECLARE ref_id CHARACTER '';
+				SET ref_id = UUIDASCHAR;
+				--Store in database
+				DECLARE acc_num CHARACTER InputRoot.JSON.Data.accNo;
+				DECLARE mob_num CHARACTER InputRoot.JSON.Data.mobileNo;
+				DECLARE bank_id CHARACTER InputRoot.JSON.Data.bankId;
+				DECLARE r ROW;
+
+				SET r.data[] = SELECT t.dsn,t.bank_code,t.schema_name FROM Database.ORADSN.SYSTEM.DSN AS t where t.bank_id = bank_id;
+
+				IF r.data.[1] IS NULL THEN
+					SET OutputRoot.JSON.Data.response = 'Invalid Bank ID';
+					PROPAGATE TO TERMINAL 'out1';
+					RETURN FALSE;
+				ELSE
+
+					SET dsn = r.data[1].dsn;
+					SET bank_code = r.data[1].bank_code;
+					SET schema_name = r.data[1].schema_name;
+					SET r = NULL;
+
+					DELETE FROM Database.{dsn}.{schema_name}.otp_manager AS t WHERE t.expires_at < CURRENT_TIMESTAMP;
+
+					INSERT INTO Database.{dsn}.{schema_name}.otp_manager (account_number, mobile_number, otp,reference_id, expires_at, bank_id)
+					VALUES ( acc_num, mob_num, otp, ref_id, CURRENT_TIMESTAMP + INTERVAL '5' MINUTE, bank_id);
+					-- send response to channel
+
+					SET OutputRoot.JSON.Data.status = 'success';
+					SET OutputRoot.JSON.Data.referenceId = ref_id;
+					--send OTP to user
+					DECLARE msg CHARACTER 'Dear Customer, ' || CAST(otp AS CHARACTER) || ' is the OTP to link your '|| bank_code ||' Bank Accounts with Account Aggregator. Do not share it with anyone. Bank NEVER asks for OTP.';
+					DECLARE res CHARACTER '';
+					-- SET msg = 'Your OTP for Account Linking Request is ' || CAST(otp AS CHARACTER) || ' .It will be expired in 5 mins. Do not share it with any one.';
+					-- SET res = sendSMS(mob_num, msg);
+
+					SET OutputRoot.EmailOutputHeader.To = 'asharkhan.rahematkhan@eidiko-india.com';
+					SET OutputRoot.EmailOutputHeader.From = 'asharkhan.rahematkhan@eidiko-india.com';
+					SET OutputRoot.EmailOutputHeader.Subject = 'OTP for Account Linking Request';
+					SET OutputRoot.BLOB.BLOB = CAST(msg AS BLOB CCSID 1208 ENCODING 546);
+
+
+				END IF;
+				
+				CALL write_log(MessageFlowLabel,'acc_req','INFO','RESPONSE : '|| CAST(ASBITSTREAM(OutputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;
+
+
+			ELSE
+				SET OutputRoot.JSON.Data.response = 'Input Request is Invalid';
+				CALL write_log(MessageFlowLabel,'acc_req','INFO',' ------------------------START----------------------') INTO var;
+				CALL write_log(MessageFlowLabel,'acc_req','ERROR','Input Request is Invalid. INPUT DATA : ' || CAST(ASBITSTREAM(InputRoot.JSON.Data) as CHARACTER CCSID 1208)) INTO var;
+				CALL write_log(MessageFlowLabel,'acc_req','INFO',' ------------------------END----------------------') INTO var;
+				PROPAGATE TO TERMINAL 'out1';
+				RETURN FALSE;
+			END IF;
+
+
+		ELSE
+
+			SET OutputRoot.JSON.Data.response = 'Invalid HTTP method';
+			CALL write_log(MessageFlowLabel,'acc_req','INFO',' ------------------------START----------------------') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_req','ERROR','Invalid HTTP method') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_req','INFO',' ------------------------END----------------------') INTO var;
+			PROPAGATE TO TERMINAL 'out1';
+			RETURN FALSE;
+		END IF;
+
+		RETURN TRUE;
+	END;
+
+END MODULE;
+
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";
+
+
+CREATE FUNCTION sendSMS (in phone CHARACTER, in msg CHARACTER ) returns CHARACTER
+LANGUAGE JAVA
+EXTERNAL NAME "AccountLinkingReq_JavaCompute.sendSMS";

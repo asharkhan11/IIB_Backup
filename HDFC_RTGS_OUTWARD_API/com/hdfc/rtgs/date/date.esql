@@ -1,0 +1,33 @@
+BROKER SCHEMA com.hdfc.rtgs.date
+
+CREATE FUNCTION txndate ( ) RETURNS CHARACTER
+BEGIN
+	DECLARE txndate CHARACTER CAST(CURRENT_DATE AS CHARACTER FORMAT 'yyyy-MM-dd');
+	RETURN txndate;
+END;
+CREATE FUNCTION reqdatetime ( ) RETURNS CHARACTER
+BEGIN
+	DECLARE reqdatetime CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyy-MM-dd''T''HH:mm:ss');
+	RETURN reqdatetime;
+END;
+CREATE FUNCTION strdate (IN cdate CHARACTER,IN ctime CHARACTER) RETURNS CHARACTER
+BEGIN
+	DECLARE strdate CHARACTER SUBSTRING(cdate from 1 for 4)||'-'||SUBSTRING(cdate from 5 for 2)||'-'||SUBSTRING(cdate from 7 for 2)||'T'||SUBSTRING(ctime from 1 for 2)||':'||SUBSTRING(ctime from 3 for 2)||':00';
+	RETURN strdate;
+END;
+CREATE FUNCTION amount (IN amount CHARACTER ) RETURNS CHARACTER
+BEGIN
+	DECLARE floatamt CHARACTER SUBSTRING(amount BEFORE ',')||'.'||SUBSTRING(amount AFTER ',');
+	RETURN floatamt;
+END;
+--CREATE FUNCTION txnidhdfc (IN payload CHARACTER ) RETURNS CHARACTER
+--BEGIN
+--	DECLARE mpayload CHARACTER;
+--	IF CONTAINS(payload,'HDCTH') THEN
+--		SET mpayload = REPLACE(payload,'HDCTH','5000');
+--	ELSEIF STARTSWITH(payload,'5000') THEN
+--		SET mpayload = REPLACE(payload,'5000','HDCTH');
+--	END IF;
+--	RETURN mpayload;
+--
+--END;

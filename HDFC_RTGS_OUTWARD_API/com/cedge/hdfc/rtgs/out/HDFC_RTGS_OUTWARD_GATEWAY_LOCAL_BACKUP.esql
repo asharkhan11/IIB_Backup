@@ -1,0 +1,20 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+
+
+CREATE COMPUTE MODULE HDFC_RTGS_OUTWARD_GATEWAY_LOCAL_BACKUP
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+		DECLARE UTR CHARACTER;
+-- 		DECLARE sType CHARACTER FIELDNAME(InputRoot.DFDL.*);
+		SET UTR = InputRoot.DFDL.*.Header.MUR;
+		SET OutputRoot.MQRFH2.usr.filename = UTR||'.RTGS'; 
+		SET OutputLocalEnvironment.Destination.File.Name = UTR||'.RTGS';
+		
+	END;
+END MODULE;

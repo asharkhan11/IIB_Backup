@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path=""/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="var" path="JCN_HOME/javacompute.jar"/>
+	<classpathentry kind="var" path="JCN_HOME/jplugin2.jar"/>
+	<classpathentry kind="var" path="COMMON_CLASSES_HOME/IntegrationAPI.jar"/>
+	<classpathentry kind="con" path="com.ibm.etools.mft.uri.classpath.MBProjectReference"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/slf4j-simple-1.7.36.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/slf4j-api-1.7.36.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/commons-logging-1.2.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/commons-codec-1.15.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/httpcore-4.4.15.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/httpclient-4.5.14.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Sreenivas Bandaru/Downloads/twilio-10.7.0.jar"/>
+	<classpathentry kind="output" path=""/>
+</classpath>

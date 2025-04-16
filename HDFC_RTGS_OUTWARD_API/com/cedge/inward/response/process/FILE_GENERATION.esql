@@ -1,0 +1,116 @@
+BROKER SCHEMA com.cedge.inward.response.process
+PATH com.cedge.hdfc.rtgs.out;
+
+CREATE COMPUTE MODULE FILE_GENERATION
+	DECLARE DSNNAME EXTERNAL CHARACTER;
+	DECLARE PROP_LOC EXTERNAL CHARACTER; 
+	DECLARE SCHEMANAME EXTERNAL CHARACTER;
+	DECLARE BANKCOUNT_TABLE EXTERNAL CHARACTER;
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		----LOGGING THE XML PAYLOAD ---------
+		DECLARE CR CHAR CAST(CAST('X''0A''' AS BLOB) AS CHAR CCSID 1208);
+		DECLARE CCSIDNO,ENCOADINGNO INTEGER;
+		SET CCSIDNO = InputRoot.Properties.CodedCharSetId;
+		SET ENCOADINGNO =InputRoot.Properties.Encoding;
+     	DECLARE PAYLOAD CHARACTER CAST (ASBITSTREAM(InputBody ENCODING ENCOADINGNO CCSID CCSIDNO) AS CHARACTER CCSID CCSIDNO ENCODING ENCOADINGNO); 
+		
+		DECLARE rc BOOLEAN; 
+-- 		CALL log4j_1_1('FILE_GENERATION_CBS', 'HDFC_RTGS_RESPONSE', 'WARN','R90:- '||CR||'=============REQUEST START==========='||CR||PAYLOAD||CR||'=============REQUEST END===============') INTO rc;	
+-- 		CALL log4j_1_1('RTGS_OUT', 'HDFC_RTGS_OUTWARD', 'WARN','R90:- ' || PAYLOAD  ) INTO rc;
+		----LOGGING THE XML PAYLOAD ---------
+	    CALL CopyEntireMessage();
+		CALL log4j_1_1('FILE_GENERATION_CBS', 'HDFC_RTGS_RESPONSE', 'WARN','---------------------------------------------------END---------------------------------------------------') INTO rc;
+	
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		DECLARE rc BOOLEAN; 
+		DECLARE count1,count INTEGER;
+		DECLARE whiteSpace CONSTANT CHARACTER CAST( X'090D0A20' AS CHAR CCSID 1208);
+		DECLARE msg_Type,bankName,key,msg_Typee,fileLoc,ftpProvider,filename,hhmmss,Qry1 CHARACTER;
+		DECLARE datechar CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyyMMdd');
+		DECLARE DB_Seq,DB_Update,TableUpdate ROW;
+		SET hhmmss = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'HHmmss'); 
+		
+			DECLARE Qry CHARACTER 'SELECT A.RTGSCOUNT FROM '||SCHEMANAME||'.'||BANKCOUNT_TABLE||' A WHERE TRIM(A.BANKNAME) = ? ';
+			SET DB_Seq.A[] = PASSTHRU(Qry TO Database.{DSNNAME} VALUES (TRIM(whiteSpace FROM Environment.BANKNAME)));
+			
+			DECLARE DBSeqRef REFERENCE TO DB_Seq;
+			MOVE DBSeqRef FIRSTCHILD;
+			DECLARE TempSeqRef REFERENCE TO DBSeqRef;
+			SET count = TempSeqRef.RTGSCOUNT;
+			
+			SET count1 = count + 1;
+			IF count1 > 99999 THEN
+				SET count1 = '0';
+			END IF;
+			
+			SET Qry = 'UPDATE '||SCHEMANAME||'.'||BANKCOUNT_TABLE||' SET RTGSCOUNT = ? WHERE TRIM(BANKNAME) = ? ';
+			SET DB_Update.A[] = PASSTHRU(Qry TO Database.{DSNNAME} VALUES (count1,TRIM(whiteSpace FROM Environment.BANKNAME)));
+			
+			DECLARE seqNo CHARACTER CAST(count AS CHARACTER);
+		
+		
+		IF Environment.Transaction_Status = 'N' THEN
+			SET msg_Type ='NR90';
+		ELSEIF Environment.Transaction_Status = 'P' THEN
+			SET msg_Type ='PR90';	
+		END IF;	
+		
+		IF msg_Type = 'NR90' THEN
+			SET msg_Typee = 'NR09';
+			SET bankName = TRIM(whiteSpace FROM Environment.BANKNAME);  
+			SET key = bankName||'_CBS_IN_'||msg_Typee;
+			CALL getProp(PROP_LOC,key,bankName ,fileLoc,ftpProvider);
+			SET OutputLocalEnvironment.Destination.File.Directory = fileLoc;
+			SET filename = 'RTGSRBI_NR90_'||datechar||'_'||hhmmss||'_'||seqNo||'.TXT';
+			SET OutputLocalEnvironment.Destination.File.Name = filename;
+			SET OutputRoot.DFDL = InputRoot.DFDL;
+			DECLARE UTR CHARACTER;
+			SET UTR = InputRoot.DFDL.R90.body.Transaction_Reference_Number;
+			SET Qry1 = 'UPDATE '||SCHEMANAME||'.'||'HDFC_REST_API_RTGS_OUTWARD'||' SET FILE_TO_CBS = ? , FLAG_FILE_CREATED = ? WHERE TRIM(HDFC_TRAN_REF) = ? ';
+			SET TableUpdate.A[] = PASSTHRU(Qry1 TO Database.{DSNNAME} VALUES (filename,'Y',UTR)); 
+			
+			CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','MSG TYPE :- ' || msg_Typee ) INTO rc; 
+			CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','FileName :- ' || filename ) INTO rc; 
+			CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','Directory :- ' || fileLoc ) INTO rc;
+			
+			
+		ELSEIF 	msg_Type = 'PR90' THEN
+			SET msg_Typee = 'PR09';
+			SET bankName = TRIM(whiteSpace FROM Environment.BANKNAME);  
+			SET key = bankName||'_CBS_IN_'||msg_Typee;
+			CALL getProp(PROP_LOC,key,bankName ,fileLoc,ftpProvider);
+			SET OutputLocalEnvironment.Destination.File.Directory = fileLoc;
+			SET filename = 'RTGSRBI_PR90_'||datechar||'_'||hhmmss||'_'||seqNo||'.TXT'; 
+			SET OutputLocalEnvironment.Destination.File.Name = filename;
+			SET OutputRoot.DFDL = InputRoot.DFDL;
+			DECLARE UTR CHARACTER;
+			SET UTR = InputRoot.DFDL.R90.body.Transaction_Reference_Number;
+			SET Qry1 = 'UPDATE '||SCHEMANAME||'.'||'HDFC_REST_API_RTGS_OUTWARD'||' SET FILE_TO_CBS = ? , FLAG_FILE_CREATED = ? WHERE TRIM(HDFC_TRAN_REF) = ? ';
+			SET TableUpdate.A[] = PASSTHRU(Qry1 TO Database.{DSNNAME} VALUES (filename,'Y',UTR)); 
+		
+		    CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','MSG TYPE :- ' || msg_Typee ) INTO rc; 
+			CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','FileName :- ' || filename ) INTO rc; 
+			CALL log4j_1_1('FileGenerator', 'HDFC_RTGS_RESPONSE', 'WARN','Directory :- ' || fileLoc ) INTO rc;
+			
+		END IF;	
+	END;
+	
+	CREATE PROCEDURE  getProp( IN P1 CHARACTER, IN P2 CHARACTER,IN P7 CHARACTER, INOUT P3 CHARACTER,INOUT P4 CHARACTER )
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.HDFC_RTGS_OUTWARD_JavaCompute.getProperties";
+END MODULE;

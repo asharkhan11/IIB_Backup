@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmResetContentDescriptor.msgnode="ComIbmResetContentDescriptor.msgnode" xmlns:ComIbmRoute.msgnode="ComIbmRoute.msgnode" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="com/hdfc/rtgs/out/bankfilepath/Initial_Routing.subflow" nsPrefix="com_hdfc_rtgs_out_bankfilepath_Initial_Routing.subflow">
+  <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1" useDefaults="true" udpSupport="true">
+    <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+    <translation xmi:type="utility:TranslatableString" key="Initial_Routing" bundleName="com/hdfc/rtgs/out/bankfilepath/Initial_Routing" pluginId="HDFC_RTGS_OUTWARD_API"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/HDFC_RTGS_OUTWARD_API/icons/full/obj16/Initial_Routing.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/HDFC_RTGS_OUTWARD_API/icons/full/obj30/Initial_Routing.gif"/>
+    <composition>
+      <nodes xmi:type="eflow:FCMSource" xmi:id="InTerminal.Input" location="21,78">
+        <translation xmi:type="utility:TranslatableString" key="InTerminal.Input" bundleName="com/hdfc/rtgs/out/bankfilepath/Initial_Routing" pluginId="HDFC_RTGS_OUTWARD_API"/>
+      </nodes>
+      <nodes xmi:type="eflow:FCMSink" xmi:id="OutTerminal.Output" location="501,113">
+        <translation xmi:type="utility:TranslatableString" key="OutTerminal.Output" bundleName="com/hdfc/rtgs/out/bankfilepath/Initial_Routing" pluginId="HDFC_RTGS_OUTWARD_API"/>
+      </nodes>
+      <nodes xmi:type="eflow:FCMSink" xmi:id="OutTerminal.Output1" location="505,14">
+        <translation xmi:type="utility:TranslatableString" key="OutTerminal.Failure" bundleName="com/hdfc/rtgs/out/bankfilepath/Initial_Routing" pluginId="HDFC_RTGS_OUTWARD_API"/>
+      </nodes>
+      <nodes xmi:type="ComIbmRoute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="108,79">
+        <outTerminals terminalNodeID="R41" dynamic="true" label="R41"/>
+        <outTerminals terminalNodeID="R42" dynamic="true" label="R42"/>
+        <translation xmi:type="utility:ConstantString" string="Route"/>
+        <filterTable filterPattern="$Root/DFDL/Generic_Message/Header/SUBMESSAGETYPE='R41'" routingOutputTerminal="R41"/>
+        <filterTable filterPattern="$Root/DFDL/Generic_Message/Header/SUBMESSAGETYPE='R42'" routingOutputTerminal="R42"/>
+      </nodes>
+      <nodes xmi:type="ComIbmResetContentDescriptor.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="213,48" messageDomain="DFDL" resetMessageDomain="true" resetMessageSet="true" messageType="{}:R41" resetMessageType="true" resetMessageFormat="true" validateTiming="immediate">
+        <translation xmi:type="utility:ConstantString" string="R41"/>
+      </nodes>
+      <nodes xmi:type="ComIbmResetContentDescriptor.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="211,126" messageDomain="DFDL" resetMessageDomain="true" resetMessageSet="true" messageType="{}:R42" resetMessageType="true" resetMessageFormat="true" validateTiming="immediate">
+        <translation xmi:type="utility:ConstantString" string="R42"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="R41" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_1" sourceTerminalName="R42" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="OutTerminal.Output" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="OutTerminal.Output" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="OutTerminal.Output1" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="OutTerminal.Output1" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_1" sourceNode="InTerminal.Input" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="OutTerminal.Output1" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in">
+        <bendPoints>109,-79,-282,-14</bendPoints>
+      </connections>
+    </composition>
+    <propertyOrganizer/>
+    <stickyBoard/>
+  </eClassifiers>
+</ecore:EPackage>

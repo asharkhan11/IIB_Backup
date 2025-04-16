@@ -1,0 +1,102 @@
+
+
+
+
+BROKER SCHEMA ExceptionHandling
+
+DECLARE var_path EXTERNAL CHARACTER ;
+DECLARE var BOOLEAN;
+
+CREATE COMPUTE MODULE AccAgg_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL init_log4j(var_path) INTO var;
+		CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+
+		DECLARE exType CHARACTER FIELDNAME(InputExceptionList.[1]);
+		DECLARE loggerName CHARACTER 'dco_warn';
+
+		IF MessageFlowLabel = 'AccountDiscovery' THEN
+			SET loggerName = 'acc_dis';
+		ELSEIF MessageFlowLabel = 'AccountLinkingReq' THEN
+			SET loggerName = 'acc_req';
+		ELSEIF MessageFlowLabel = 'AccountLinkingVerification' THEN
+			SET loggerName = 'acc_verify';
+		ELSEIF MessageFlowLabel = 'FiDataFetch' THEN
+			SET loggerName = 'fi_fetch';
+		END IF;		
+
+
+----------parser exception------------------------------------
+
+		IF exType = 'ParserException' THEN
+			DECLARE inEx REFERENCE TO InputExceptionList.ParserException;
+			DECLARE exLabel CHARACTER InputExceptionList.ParserException.Label;
+			DECLARE exText CHARACTER InputExceptionList.ParserException.Text || ' ';
+
+			SET exText = exText || inEx.Insert[1].Text || '.' || inEx.Insert[2].Text || ' Input Data is: ' || CAST(CAST(inEx.Insert[3].Text AS BLOB) AS CHARACTER CCSID 1208);
+			SET OutputRoot.JSON.Data.statusCode = '400';
+			SET OutputRoot.JSON.Data.error = exType;
+			SET OutputRoot.JSON.Data.message = 'Input data cannot be parsed';
+
+
+			CALL write_log(MessageFlowLabel,loggerName,'ERROR',' ---------------START----------------') INTO var;
+			CALL write_log(MessageFlowLabel,loggerName,'ERROR',' Exception Type : ' || exType || ' Exception Node : ' || exLabel || ' Exception Details :' || exText)INTO var;
+			CALL write_log(MessageFlowLabel,loggerName,'ERROR',' ----------------END-----------------')INTO var;
+			
+-----------------Recoverable Exception--------------------------------------
+
+		ELSEIF exType = 'RecoverableException' THEN
+
+			DECLARE inEx REFERENCE TO InputExceptionList.RecoverableException;
+
+			WHILE LASTMOVE(inEx) AND FIELDNAME(inEx) = 'RecoverableException' DO
+				MOVE inEx LASTCHILD;
+			END WHILE;
+
+			SET exType = FIELDNAME(inEx);
+
+-------------------------Database Exception-------------------------------
+
+			IF exType = 'DatabaseException' THEN
+				MOVE inEx PREVIOUSSIBLING;
+				DECLARE query CHARACTER inEx.Text;
+				MOVE inEx NEXTSIBLING;
+
+				WHILE LASTMOVE(inEx) DO
+					MOVE inEx LASTCHILD;
+				END WHILE;
+
+				DECLARE exText CHARACTER inEx;
+				DECLARE exLabel CHARACTER InputExceptionList.RecoverableException.Label;
+
+				SET OutputRoot.JSON.Data.statusCode = '500';
+				SET OutputRoot.JSON.Data.error = exType;
+				SET OutputRoot.JSON.Data.message = 'Internal Server Error Occured';
+
+				CALL write_log(MessageFlowLabel,loggerName,'ERROR',' ---------------START----------------') INTO var;
+				CALL write_log(MessageFlowLabel,loggerName,'ERROR',' Exception Type : ' || exType || ' Exception Node : ' || exLabel || ' Exception Details :' || 'SQL Exception at : ' || exText || ' ' || query)INTO var;
+				CALL write_log(MessageFlowLabel,loggerName,'ERROR',' ----------------END-----------------')INTO var;
+
+			END IF;
+
+		END IF;
+
+
+
+	END;
+END MODULE;
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";

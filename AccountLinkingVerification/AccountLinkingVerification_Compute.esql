@@ -1,0 +1,67 @@
+
+DECLARE var_path EXTERNAL CHARACTER;
+DECLARE var BOOLEAN;
+
+CREATE COMPUTE MODULE AccountLinkingVerification_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		CALL init_log4j(var_path) INTO var;
+		CALL write_log(MessageFlowLabel,'acc_verify','INFO','REQUEST : '|| CAST(ASBITSTREAM(InputRoot.JSON.Data) AS CHARACTER CCSID 1208)) INTO var;
+
+		IF CONTAINS(InputRoot.HTTPInputHeader."X-Original-HTTP-Command", 'POST') THEN
+
+			IF FIELDNAME(InputRoot.JSON.Data.[1]) = 'bankId' AND FIELDNAME(InputRoot.JSON.Data.[2]) = 'accNo' AND FIELDNAME(InputRoot.JSON.Data.[3]) = 'token' AND FIELDNAME(InputRoot.JSON.Data.[4]) = 'referenceId' AND InputRoot.JSON.Data.[5] IS NULL THEN
+
+				DECLARE r ROW;
+				DECLARE inRef REFERENCE TO InputRoot.JSON.Data;
+
+				SET r.data[] = SELECT t.otp,t.reference_id FROM Database.ORADSN.SYSTEM.otp_manager AS t where t.bank_id = inRef.bankId AND t.account_number = inRef.accNo AND t.expires_at > CURRENT_TIMESTAMP;
+
+				IF r.data.[1] IS NULL THEN
+					SET OutputRoot.JSON.Data.response = 'OTP is invalid or Expired';
+				ELSE
+					IF r.data.otp = inRef.token AND r.data.reference_id = inRef.referenceId THEN
+						
+						SET OutputRoot.JSON.Data.status = 'success';
+						
+					ELSE
+						SET OutputRoot.JSON.Data.response = 'OTP is invalid';
+					END IF;
+				END IF;
+				
+				CALL write_log(MessageFlowLabel,'acc_verify','INFO','RESPONSE : '|| CAST(ASBITSTREAM(OutputRoot.JSON.Data) AS CHARACTER CCSID 1208 )) INTO var;
+
+			ELSE
+				SET OutputRoot.JSON.Data.response = 'Input Request is Invalid';
+				CALL write_log(MessageFlowLabel,'acc_verify','INFO',' ------------------------START----------------------') INTO var;
+				CALL write_log(MessageFlowLabel,'acc_verify','ERROR','Input Request is Invalid. INPUT DATA : ' || CAST(ASBITSTREAM(InputRoot.JSON.Data) as CHARACTER CCSID 1208)) INTO var;
+				CALL write_log(MessageFlowLabel,'acc_verify','INFO',' ------------------------END----------------------') INTO var;
+			END IF;
+
+
+		ELSE
+
+			SET OutputRoot.JSON.Data.response = 'Invalid HTTP method';
+			CALL write_log(MessageFlowLabel,'acc_verify','INFO',' ------------------------START----------------------') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_verify','ERROR','Invalid HTTP method') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_verify','INFO',' ------------------------END----------------------') INTO var;
+
+		END IF;
+
+	END;
+END MODULE;
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";

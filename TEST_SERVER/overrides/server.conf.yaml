@@ -1,0 +1,11 @@
+---
+RestAdminListener:
+    port: 7600
+Credentials:
+  ExternalDirectoryVault:
+    directory: 'C:\Users\Sreenivas Bandaru\IBM\ACET12\workspace\TEST_EXT_DIR_VAULT'
+ResourceManagers:
+  HTTPConnector:
+    ListenerPort: 7800
+  JVM:
+    jvmDebugPort: 9997

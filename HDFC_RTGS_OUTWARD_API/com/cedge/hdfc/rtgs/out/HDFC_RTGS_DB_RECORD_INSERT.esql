@@ -1,0 +1,541 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+
+--DECLARE Credentials SHARED ROW;
+CREATE COMPUTE MODULE HDFC_RTGS_DB_RECORD_INSERT
+	DECLARE DSN EXTERNAL CHARACTER;
+	DECLARE PROP_LOC EXTERNAL CHARACTER;
+	DECLARE Log4jConfighFilePath EXTERNAL CHARACTER '';
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+----	============================ PAYLOAD LOGGING ==================================================================
+		
+		DECLARE CR CHAR CAST(CAST('X''0A''' AS BLOB) AS CHAR CCSID 1208);
+		DECLARE CCSIDNO,ENCOADINGNO INTEGER;
+		SET CCSIDNO = InputRoot.Properties.CodedCharSetId;
+		SET ENCOADINGNO =InputRoot.Properties.Encoding;
+     	DECLARE PAYLOAD CHARACTER CAST (ASBITSTREAM(InputBody ENCODING ENCOADINGNO CCSID CCSIDNO) AS CHARACTER CCSID CCSIDNO ENCODING ENCOADINGNO);
+        DECLARE rc BOOLEAN;
+-- 		CALL initLog4j('/var/iib/interface/hdfc/neft/inward/properties/log4j/hdfc_neft_rgts_log4j.xml') INTO rc;
+		CALL initLog4j(Log4jConfighFilePath) INTO rc;
+		CALL log4j_1_1('RTGS_OUT', 'HDFC_RTGS_OUTWARD', 'WARN','---------------------------------------------------START---------------------------------------------------') INTO rc;
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Message received from CBS') INTO rc;
+-- 		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','RTGS_MESSAGE_FROM_CBS: '||CR||'=============REQUEST START==========='||CR||PAYLOAD||CR||'=============REQUEST END===============') INTO rc;	
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Transaction number : '||InputRoot.DFDL.*.Body.TRANSACTIONREFERENCENUMBER) INTO rc;
+----	============================ PAYLOAD LOGGING ==================================================================			
+		 CALL CopyMessageHeaders();
+--  	SET Credentials.R1[] = PASSTHRU('SELECT * FROM HDFC_API_IFSC_BANKNAME' TO Database.{DSN});
+-- 	    SET Environment.Credentials=Credentials.R1;
+	    DECLARE credentials ROW;
+		SET credentials.values[]=PASSTHRU('SELECT * FROM HDFC_API_IFSC_BANKNAME' TO Database.{DSN});
+		SET Environment.iduser=credentials.values.IDUSER;
+		SET Environment.idcust=credentials.values.IDCUST;
+		SET Environment.groupid=credentials.values.GROUPID;
+		
+		 CALL copyPayload();
+		 DECLARE flag BOOLEAN CopyEntireMessage();
+		 DECLARE whiteSpace CONSTANT CHARACTER CAST( X'090D0A20' AS CHAR CCSID 1208);
+		 
+		DECLARE FTP_FILE,Extension CHARACTER ;
+        SET Extension = Environment.filename;
+        SET FTP_FILE  = Environment.filename;
+        SET FTP_FILE  = SUBSTRING(FTP_FILE BEFORE '.');
+        SET Extension = SUBSTRING(Extension AFTER '.');
+--      SET Extension = LOWER(Extension);
+             
+        IF Environment.stype='R41' THEN
+        	SET Extension = UPPER(Extension);
+        ELSEIF Environment.stype='R42' THEN
+        	SET Extension = UPPER(Extension);
+        ELSE
+        	SET Extension = LOWER(Extension);
+        END IF;
+                
+		 IF flag THEN		
+				 SET OutputRoot.DFDL =  InputRoot.DFDL;
+				  ------------------Modified By Harsha Nair--------------------------------------------
+				 	--Commented as .done file was not getting pushed at CBS. Shifted this line to STORE_MSG compute node--
+					--	SET OutputRoot.DFDL.R41.Body.OREDERING_CUSTOMER.LINE2 = OutputRoot.MQRFH2.usr.Bank_Details.sending_name;
+						--------------------------------------------------------------
+ 				  SET OutputLocalEnvironment.Destination.File.Name = FTP_FILE||'.'||Extension||'.Done';
+				  SET OutputRoot.MQRFH2 = NULL;
+				 CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Writing '||FTP_FILE||'.'||Extension||'.Done file to CBS') INTO rc;
+				 RETURN TRUE;
+		  ELSE
+				SET OutputRoot.DFDL =  InputRoot.DFDL;
+				CALL updateLocalEnv();
+				IF Environment.retryCount >= 1 THEN
+					SET OutputLocalEnvironment.Destination.File.Name = FTP_FILE||'.'||Extension||'.Done';
+					CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Writing '||FTP_FILE||'.'||Extension||'.Done file to CBS') INTO rc;
+					SET OutputRoot.MQRFH2 = NULL;
+					RETURN TRUE;
+				ELSE
+					
+					SET OutputLocalEnvironment.Destination.File.Name = FTP_FILE||'.'||Extension||'.Dup';
+					CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Writing '||FTP_FILE||'.'||Extension||'.Dup file to CBS') INTO rc;
+					CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','-----------------------------------------------END------------------------------------------') INTO rc;
+					SET OutputRoot.MQRFH2 = NULL;
+					PROPAGATE TO TERMINAL 'out1' DELETE NONE;
+					RETURN FALSE;
+				END IF;				
+			END IF;			
+	END;
+	/*
+	* This Methode is used to copy the message headers from Input tree to Output tress
+	*/
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+	/* 
+	* This procedure is to check whether the Duplicate record found for the transaction number 
+	*/
+	CREATE PROCEDURE copyPayload ( )
+	BEGIN
+		DECLARE msgId CHARACTER InputRoot.MQMD.MsgId;
+		SET msgId = SUBSTRING(msgId FROM 3 FOR 48);
+		DECLARE check ROW;
+		DECLARE rc BOOLEAN;
+		DECLARE txnNum CHARACTER InputRoot.DFDL.*.Body.TRANSACTIONREFERENCENUMBER; ----> 2020 Filed Value 
+		DECLARE datechar CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyyMMdd'); 
+		DECLARE fileName CHARACTER 'filename';
+		SET txnNum = datechar||txnNum; ---> concating date and 2020 field 
+		SET Environment.tranrefNo=txnNum; 
+		SET check.R[] = PASSTHRU('SELECT RETRY_COUNT,FILE_NAME,STATUS FROM RTGS_OUT_PAYLOAD WHERE TXN_REF_NUM = ?' TO Database.{DSN} VALUES(txnNum));
+		--DECLARE flag INTEGER CARDINALITY(check.R[]); 
+		IF check.R[1].RETRY_COUNT >= 0 AND check.R[1].STATUS = 'F' THEN 
+			UPDATE Database.RTGS_OUT_PAYLOAD as T
+			SET
+			LAST_MOD_TIME = CURRENT_TIMESTAMP,
+			RETRY_COUNT=check.R[1].RETRY_COUNT+1
+			WHERE
+			T.TXN_REF_NUM = txnNum;
+			CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Duplicate record found for the transaction number:'||txnNum || 'in RTGS_OUT_PAYLOAD table') INTO rc;
+			CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Retry count incremented for this transaction.') INTO rc;
+			SET Environment.filename  = check.R[1].FILE_NAME;
+			SET Environment.retryCount = check.R[1].RETRY_COUNT;
+		ELSEIF check.R[1].RETRY_COUNT = 0 OR check.R[1].STATUS = 'S' THEN
+			
+			SET fileName = InputRoot.MQRFH2.usr.filename;
+			SET Environment.filename = fileName;
+			
+						
+		ELSE
+			DECLARE wholeMsgBlob BLOB ASBITSTREAM(InputRoot.DFDL, InputRoot.Properties.Encoding, InputRoot.Properties.CodedCharSetId );
+	 		DECLARE wholeMsgChar CHAR CAST(wholeMsgBlob AS CHAR CCSID InputRoot.Properties.CodedCharSetId);
+	 		DECLARE fileName CHARACTER 'filename';
+	 		SET fileName = InputRoot.MQRFH2.usr.filename;
+	 		SET Environment.filename = fileName;
+	 --		DECLARE txnNum CHARACTER InputRoot.DFDL.*.Body.TRANSACTIONREFERENCENUMBER;
+	 		INSERT INTO Database.RTGS_OUT_PAYLOAD (MSGID,PAYLOAD,CREATION_TIME,LAST_MOD_TIME,STATUS,RETRY_COUNT,FILE_NAME,TXN_REF_NUM ) 
+	 		VALUES (msgId,wholeMsgChar, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,'F', '0',fileName,txnNum);	
+	 		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Message inserted into RTGS_OUT_PAYLOAD Table') INTO rc;		
+		END IF;
+		
+	END;
+---------------------------------------------------------------------------------------------------------------------------
+	
+	CREATE PROCEDURE CopyEntireMessage() RETURNS BOOLEAN BEGIN 
+		DECLARE sType CHARACTER FIELDNAME(InputRoot.DFDL.*);
+		DECLARE msg CHARACTER;
+		DECLARE rc BOOLEAN;
+		SET Environment.stype = sType;		
+		DECLARE wholeMsgBlob BLOB ASBITSTREAM(InputRoot.DFDL, InputRoot.Properties.Encoding, InputRoot.Properties.CodedCharSetId );
+	 	SET msg = CAST(wholeMsgBlob AS CHAR CCSID InputRoot.Properties.CodedCharSetId);
+		DECLARE sendAddr CHARACTER InputRoot.DFDL.*.Header.SENDERADDRESS;
+		DECLARE oDate CHARACTER InputRoot.DFDL.*.Body.VALUEDATE_CURRENCY_AMOUNT.VALUEDATE;
+		SET Environment.TranDate = oDate;
+		DECLARE utr CHARACTER InputRoot.DFDL.*.Header.UNIQUETRANSACTIONREF;
+		SET sendAddr = SUBSTRING(sendAddr FROM 1 FOR 4);
+		SET utr = SUBSTRING(utr FROM LENGTH(utr)-5 FOR LENGTH(utr));
+		DECLARE incUTR CHARACTER sendAddr||oDate||'5000'||utr;
+		SET Environment.incUTR=incUTR;
+		DECLARE verifyQry CHARACTER 'select TRAN_REF_NO from RTGS_OUT where TRAN_REF_NO = ?'; ----CHANGE HERE-------
+		DECLARE verifyRef ROW;
+		DECLARE flag CHARACTER 'TRUE';
+		DECLARE whiteSpace CONSTANT CHARACTER CAST( X'090D0A20' AS CHAR CCSID 1208);
+		DECLARE trn CHARACTER InputRoot.DFDL.*.Body.TRANSACTIONREFERENCENUMBER ;
+		SET trn = TRIM(whiteSpace FROM trn);
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Message Type : '||sType) INTO rc;
+		SET verifyRef.R[] = PASSTHRU(verifyQry TO Database.{DSN} VALUES(trn));
+		DECLARE refver REFERENCE TO verifyRef.R[<];
+		IF NOT LASTMOVE(refver) THEN
+				
+				IF sType = 'R41' THEN
+					DECLARE R41Header REFERENCE TO InputRoot.DFDL.R41.Header;
+					DECLARE R41Body REFERENCE TO InputRoot.DFDL.R41.Body;
+					CALL insertDatabase(R41Header,R41Body,sType,msg,incUTR );			
+				
+				ELSEIF sType = 'R42' THEN
+					DECLARE R42Header REFERENCE TO InputRoot.DFDL.R42.Header;
+					DECLARE R42Body REFERENCE TO InputRoot.DFDL.R42.Body;
+					CALL insertDatabase(R42Header,R42Body,sType,msg,incUTR );
+					
+		--		ELSE
+		--			DECLARE Inc_RETR42Header REFERENCE TO InputRoot.DFDL.Inc_RETR42.Header;
+		--			DECLARE Inc_RETR42Body REFERENCE TO InputRoot.DFDL.Inc_RETR42.Body;
+		--			CALL insertDatabase(Inc_RETR42Header,Inc_RETR42Body,sType,msg,incUTR );
+				
+				END IF;
+					--CALL updateLocalEnv();
+				CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Data inserted into RTGS_OUT, RTGS_MSG_OUT tables') INTO rc;
+					RETURN TRUE;	
+		ELSE
+			DECLARE sendCorrs CHARACTER;
+			IF sType =  'Inc_RETR42' THEN
+				DECLARE relTxnRefNum CHARACTER;
+				SET relTxnRefNum = InputRoot.DFDL.Inc_RETR42.Body.RELATED_REFERENCE;--2006
+				DECLARE rr42Query CHARACTER 'SELECT A.SENDER_CORRES,A.RECVR_CORRES FROM RTGS_IN A WHERE A.TRAN_REF_NO = ?';
+				DECLARE ifscDetails ROW;
+				SET ifscDetails.A[] = PASSTHRU(rr42Query TO Database.{DSN} VALUES(relTxnRefNum));
+				SET sendCorrs = ifscDetails.A[1].RECVR_CORRES;
+							
+			ELSE
+				DECLARE Body REFERENCE TO InputRoot.DFDL.*.Body;
+				IF Body.SENDERS_CORRESPONDENT1 IS NOT NULL THEN
+					SET sendCorrs = Body.SENDERS_CORRESPONDENT1;
+				ELSEIF Body.ORDERING_INSTITUTION1 IS NOT NULL THEN
+					SET sendCorrs = Body.ORDERING_INSTITUTION1;
+				ELSEIF Body.ORDERING_INSTITUTION2.LINE1 IS NOT NULL THEN
+					DECLARE Ref REFERENCE TO Body.ORDERING_INSTITUTION2.LINE1;
+					WHILE LASTMOVE(Ref) DO
+						SET sendCorrs = sendCorrs||Ref;
+						MOVE Ref NEXTSIBLING;
+					END WHILE; 
+				ELSEIF Body.SENDERS_CORRESPONDENT2.LINE1 IS NOT NULL THEN
+					DECLARE Ref REFERENCE TO Body.SENDERS_CORRESPONDENT2.LINE1;
+					WHILE LASTMOVE(Ref) DO
+						SET sendCorrs = sendCorrs||Ref;
+						MOVE Ref NEXTSIBLING;
+					END WHILE;
+				ELSEIF Body.SENDERS_CORRESPONDENT3.LINE1 IS NOT NULL THEN
+					DECLARE Ref REFERENCE TO Body.SENDERS_CORRESPONDENT3.LINE1;
+					WHILE LASTMOVE(Ref) DO
+						SET sendCorrs = sendCorrs||Ref;
+						MOVE Ref NEXTSIBLING;
+					END WHILE;
+				END IF;
+				
+			END IF;
+			DECLARE bankNameref ROW; 
+			DECLARE sifsc CHARACTER ; 
+			SET sifsc = SUBSTRING(sendCorrs FROM 1 FOR 9) || '%';
+			SET bankNameref.R[] = PASSTHRU('SELECT BANKNAME FROM IFSC_BANKNAME WHERE IFSC LIKE ?' TO Database.{DSN} VALUES(sifsc));
+			SET Environment.bankName =TRIM(bankNameref.R[1].BANKNAME);
+			CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Duplicate record found for this transaction.') INTO rc;			
+			RETURN FALSE;
+		END IF;
+	
+	END;
+	
+	CREATE PROCEDURE insertDatabase(IN Header REFERENCE,IN Body REFERENCE, IN msgType CHARACTER, IN msg CHARACTER, IN incUTR CHARACTER ) 
+	BEGIN
+		
+		DECLARE cTime CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'dd-MMM-yyyy HH:mm:ss');
+		DECLARE rcvCorr CHARACTER '';
+		DECLARE relTxnRefNum CHARACTER '';
+		IF Body.RECEIVER_CORRESPONDENT1 IS NOT NULL THEN
+			SET rcvCorr = Body.RECEIVER_CORRESPONDENT1;
+		ELSEIF Body.RECEIVER_CORRESPONDENT2.LINE1 IS NOT NULL THEN
+			SET rcvCorr = Body.RECEIVER_CORRESPONDENT2.LINE1;
+		ELSEIF Body.RECEIVER_CORRESPONDENT2.LINE1 IS NOT NULL THEN
+			DECLARE Ref REFERENCE TO Body.RECEIVER_CORRESPONDENT2.LINE1;
+			WHILE LASTMOVE(Ref) DO
+				SET rcvCorr = rcvCorr||Ref;
+				MOVE Ref NEXTSIBLING;
+			END WHILE;
+		ELSEIF Body.RECEIVER_CORRESPONDENT3.LINE1 IS NOT NULL THEN
+			DECLARE Ref REFERENCE TO Body.RECEIVER_CORRESPONDENT3.LINE1;
+			WHILE LASTMOVE(Ref) DO
+				SET rcvCorr = rcvCorr||Ref;
+				MOVE Ref NEXTSIBLING;
+			END WHILE;
+		ELSEIF Body.ACCOUNT_WITH_INSTITUTION1 IS NOT NULL THEN
+			SET rcvCorr = Body.ACCOUNT_WITH_INSTITUTION1;
+		END IF;
+		DECLARE sendCorrs CHARACTER '';
+		IF Body.SENDERS_CORRESPONDENT1 IS NOT NULL THEN
+			SET sendCorrs = Body.SENDERS_CORRESPONDENT1;
+		ELSEIF Body.ORDERING_INSTITUTION1 IS NOT NULL THEN
+			SET sendCorrs = Body.ORDERING_INSTITUTION1;
+		ELSEIF Body.ORDERING_INSTITUTION2.LINE1 IS NOT NULL THEN
+			DECLARE Ref REFERENCE TO Body.ORDERING_INSTITUTION2.LINE1;
+			WHILE LASTMOVE(Ref) DO
+				SET sendCorrs = sendCorrs||Ref;
+				MOVE Ref NEXTSIBLING;
+			END WHILE; 
+		ELSEIF Body.SENDERS_CORRESPONDENT2.LINE1 IS NOT NULL THEN
+			DECLARE Ref REFERENCE TO Body.SENDERS_CORRESPONDENT2.LINE1;
+			WHILE LASTMOVE(Ref) DO
+				SET sendCorrs = sendCorrs||Ref;
+				MOVE Ref NEXTSIBLING;
+			END WHILE;
+		ELSEIF Body.SENDERS_CORRESPONDENT3.LINE1 IS NOT NULL THEN
+			DECLARE Ref REFERENCE TO Body.SENDERS_CORRESPONDENT3.LINE1;
+			WHILE LASTMOVE(Ref) DO
+				SET sendCorrs = sendCorrs||Ref;
+				MOVE Ref NEXTSIBLING;
+			END WHILE;
+		END IF;
+		
+		DECLARE amount CHARACTER '';
+		SET amount = TRIM(LEADING '0' FROM Body.VALUEDATE_CURRENCY_AMOUNT.AMOUNT);
+		SET amount = REPLACE(amount,',','.');
+		SET OutputLocalEnvironment.Variables.Bank_Details.Amount = amount;
+		
+		DECLARE tran_date CHARACTER '';
+		SET tran_date = Body.VALUEDATE_CURRENCY_AMOUNT.VALUEDATE;
+		SET OutputLocalEnvironment.Variables.Bank_Details.Tran_Date = SUBSTRING(tran_date FROM 1 FOR 4)||'-'||SUBSTRING(tran_date FROM 5 FOR 2)||'-'||SUBSTRING(tran_date FROM 7 FOR 2);
+		
+		DECLARE senderName, senderActnum, senderAddress,benfName, benfAcntNo, benfAddress CHARACTER '';
+		 
+		  SET senderName  	= Body.OREDERING_CUSTOMER.LINE2;
+		  SET senderActnum  = Body.OREDERING_CUSTOMER.LINE1;
+		  SET senderAddress = Body.OREDERING_CUSTOMER.LINE3;
+		  SET benfName		= Body.BENEFICIARY_CUSTOMER.LINE2;
+		  SET benfAcntNo	= Body.BENEFICIARY_CUSTOMER.LINE1;
+		  SET benfAddress	= Body.BENEFICIARY_CUSTOMER.LINE3;	
+		
+		--replace , from name
+		DECLARE beneficiaryName CHARACTER REPLACE(benfName,',','');
+		SET OutputLocalEnvironment.Variables.Bank_Details.beneficiary_name = beneficiaryName;
+		-----------------------------
+		
+	 	SET senderName = SUBSTRING(senderName FROM 1 FOR 29);
+	 	SET OutputRoot.MQRFH2.usr.Bank_Details.sending_name = senderName;
+		----------------------------------------------------------------------
+		DECLARE OrcCustRef REFERENCE TO Body.OREDERING_CUSTOMER.LINE1;
+		DECLARE ordCust CHARACTER '';
+		WHILE LASTMOVE(OrcCustRef) DO
+			SET ordCust = ordCust||OrcCustRef;
+			MOVE OrcCustRef NEXTSIBLING;
+		END WHILE;
+		SET ordCust = REPLACE(ordCust,'.','');
+		SET ordCust = REPLACE(ordCust,',','');  
+		
+		DECLARE benefCust CHARACTER '';
+		
+		IF msgType = 'R41' THEN
+				
+			DECLARE ref REFERENCE TO Body.BENEFICIARY_CUSTOMER.LINE1;
+			WHILE LASTMOVE(ref) DO
+				SET benefCust = benefCust||ref;
+				MOVE ref NEXTSIBLING;
+			END WHILE;
+		
+		ELSE
+			
+			DECLARE ref REFERENCE TO Body.BENEFICIARY_INSTITUTION2.LINE1;
+			WHILE LASTMOVE(ref) DO
+				SET benefCust = benefCust||ref;
+				MOVE ref NEXTSIBLING;
+			END WHILE;
+			
+		END IF;
+		SET benefCust = REPLACE(benefCust,'.',''); 
+		SET benefCust = REPLACE(benefCust,',','');   
+		
+		
+		DECLARE sendToReceInfo CHARACTER '';
+		DECLARE SendToRecInfoRef  REFERENCE TO Body.SENDER_TO_RECEIVER_INFORMATION.LINE1;
+		SET OutputLocalEnvironment.Variables.RR42_additional.SenderToRecvInfo=SendToRecInfoRef;
+		
+		WHILE LASTMOVE(SendToRecInfoRef) DO
+				SET sendToReceInfo = sendToReceInfo||SendToRecInfoRef;
+				MOVE SendToRecInfoRef NEXTSIBLING;
+		END WHILE;
+/*		IF msgType =  'Inc_RETR42' THEN
+			SET msgType = 'U42';
+			SET rcvCorr = benefCust;
+			SET relTxnRefNum = Body.RELATED_REFERENCE;--2006
+			DECLARE rr42Query CHARACTER 'SELECT A.SENDER_CORRES,A.RECVR_CORRES,A.SENDER_NAME,A.SENDER_ACCTNO,A.BENEFICIARY_NAME,A.BENEFICIARY_ACCTNO FROM RTGS_IN A WHERE A.TRAN_REF_NO = ?';
+			DECLARE ifscDetails ROW;
+			SET ifscDetails.A[] = PASSTHRU(rr42Query TO Database.{DSN} VALUES(relTxnRefNum));
+			SET rcvCorr =TRIM(ifscDetails.A[1].SENDER_CORRES);
+			SET sendCorrs = TRIM(ifscDetails.A[1].RECVR_CORRES);
+			
+			SET OutputLocalEnvironment.Variables.RR42_additional.SenderIfsc = TRIM(ifscDetails.A[1].RECVR_CORRES);
+			SET OutputLocalEnvironment.Variables.RR42_additional.RecvIfsc = TRIM(ifscDetails.A[1].SENDER_CORRES);
+			SET OutputLocalEnvironment.Variables.RR42_additional.RecvAcctNumber = TRIM(ifscDetails.A[1].SENDER_ACCTNO);
+			SET OutputLocalEnvironment.Variables.RR42_additional.RecvAcctName = TRIM(ifscDetails.A[1].SENDER_NAME);
+			SET OutputLocalEnvironment.Variables.RR42_additional.SenderAcctName = TRIM(ifscDetails.A[1].BENEFICIARY_NAME);
+			SET OutputLocalEnvironment.Variables.RR42_additional.SenderAcctNumber=TRIM(ifscDetails.A[1].BENEFICIARY_ACCTNO);
+			
+			--	SET Body.VALUEDATE_CURRENCY_AMOUNT.AMOUNT = TRIM(LEADING '0' FROM Body.VALUEDATE_CURRENCY_AMOUNT.AMOUNT
+			--Test
+			SET sendToReceInfo = 'AM05' || sendToReceInfo||SendToRecInfoRef;
+			DECLARE AM05 CHARACTER 'AM05' ;			
+			SET OutputRoot.DFDL.Inc_RETR42.Body.SENDER_TO_RECEIVER_INFORMATION.LINE1 = AM05 || InputRoot.DFDL.Inc_RETR42.Body.SENDER_TO_RECEIVER_INFORMATION.LINE1;
+			
+		END IF; */
+	/*	DECLARE bankShortCode CHARACTER SUBSTRING(sendCorrs FROM 1 FOR 4);
+		DECLARE dbinfo ROW;
+  		set dbinfo.A[] = SELECT T.HO_IFSC_CODE FROM  Database.HO_IFSC_MASTR AS T WHERE T.BANK_SHORT_CODE = bankShortCode;
+		SET OutputLocalEnvironment.Variables.temp.record.HO_IFSC_Sender = dbinfo.A[1].HO_IFSC_CODE;
+		SET bankShortCode = SUBSTRING(rcvCorr FROM 1 FOR 4);
+		set dbinfo.A[] = SELECT T.HO_IFSC_CODE FROM  Database.HO_IFSC_MASTR AS T WHERE T.BANK_SHORT_CODE = bankShortCode;
+		SET OutputLocalEnvironment.Variables.temp.record.HO_IFSC_Receiver = dbinfo.A[1].HO_IFSC_CODE;
+	*/	
+		--DECLARE bankName CHARACTER 'bankname';
+		DECLARE bankNameref ROW;    
+		DECLARE sifsc CHARACTER ;
+		SET sifsc = SUBSTRING(sendCorrs FROM 1 FOR 9) || '%';
+		SET bankNameref.R[] = PASSTHRU('SELECT BANKNAME FROM IFSC_BANKNAME WHERE IFSC LIKE ?' TO Database.{DSN} VALUES(sifsc));
+--		SET bankNameref.R[] = PASSTHRU('SELECT BANKNAME FROM BANKNAME WHERE IFSC_CODE LIKE ?' TO Database.{DSN} VALUES(sifsc));
+		SET Environment.bankName = TRIM(bankNameref.R[1].BANKNAME);
+--		DECLARE credentials ROW;
+--		SET credentials.values[]=PASSTHRU('SELECT * FROM HDFC_API_IFSC_BANKNAME WHERE BANKNAME = ?' TO Database.{DSN} VALUES(Environment.bankName));
+--		SET Environment.iduser=credentials.values.IDUSER;
+--		SET Environment.idcust=credentials.values.IDCUST;
+--		SET Environment.groupid=credentials.values.GROUPID;
+		
+		DECLARE bname CHARACTER TRIM(Environment.bankName);
+		
+		IF bname = 'FCB' THEN
+			SET OutputLocalEnvironment.Variables.Bank_Details.Bank_Id = 'Fingrowth Cooperative Bank Ltd';
+		ELSEIF bname = 'KBS' THEN
+			SET OutputLocalEnvironment.Variables.Bank_Details.Bank_Id = 'Krishna Bhima Samruddhi Bank';
+		ELSEIF bname = 'VCB' THEN
+			SET OutputLocalEnvironment.Variables.Bank_Details.Bank_Id = 'Vishwas Cooperative Bank';
+		END IF;
+		
+		DECLARE UTRref ROW;    
+	--	SET UTRref.R[] = PASSTHRU('SELECT ORG_MSG_ID,ORG_TXN_ID FROM RTGS_IN WHERE  TRAN_REF_NO= ?' TO Database.{DSN} VALUES(relTxnRefNum));
+	--	SET OutputLocalEnvironment.Variables.temp.record.OrgnlTxId = UTRref.R[1].ORG_TXN_ID;
+	--	SET OutputLocalEnvironment.Variables.temp.record.OrgnlMsgId = UTRref.R[1].ORG_MSG_ID;
+	
+		SET Environment.TRAN_REF_NO = Body.TRANSACTIONREFERENCENUMBER;
+	
+		-- Inserting data into RTGS_OUT Table
+		
+----------------------------------------------------------------------------------------------------------------------------------------
+		
+--AJ--	INSERT INTO Database.RTGS_OUT (TRAN_REF_NO, RELATED_TRAN_REF_NO, TRAN_DATE, AMOUNT, CURRENCY, ORDER_CUSTOMER, ORDER_INST, 
+--		SENDER_CORRES, RECVR_CORRES, INTERMEDIARY, ACCT_WITH_INST, BENEF_CUSTOMER, BENEF_INST, PAYMENT_DETAILS, CHARGE_DETAILS,
+--		 SEND_TO_RECE_INFO, CREATION_TIME, LAST_MOD_TIME, OUT_MSG_SENT_SBI, BANKNAME, ACK_NACK_INDICATOR, REASON_CODE, 
+--		 SETTLEMENT_TIME, ACK_NACK_SENT_CBS, ACK_NACK_MSG, TYPE, ACKNACKTYPE, RET_ORG_ERR, RET_CORE_REASON, DUP_ORG_OUT, TEXT_FILENAME, INC_UTR)
+--		 VALUES 
+--		(Body.TRANSACTIONREFERENCENUMBER,
+--		 relTxnRefNum,
+--		 Body.VALUEDATE_CURRENCY_AMOUNT.VALUEDATE,
+--		 amount,
+--		 Body.VALUEDATE_CURRENCY_AMOUNT.CURRENCY,
+--		 ordCust,
+--		 '',
+--		 sendCorrs,
+--		 rcvCorr,
+--		 '',
+--		 '',
+--		 benefCust,
+--		 '',
+--		 '',
+--		 '',
+--		 sendToReceInfo,
+--		 cTime,
+--		 cTime,
+--		 '0',
+--		 Environment.bankName,
+--		 '0',
+--		 '0',
+--		 '0',
+--		 '0',
+--		 '0',
+--		 msgType,
+--		 '',
+--		 '0',
+--		 '0',
+--		 '0',
+--		 Environment.filename,
+--		 incUTR);	
+----------------------------------------------------------------------------------------------------------------------------------------	
+		INSERT INTO Database.HDFC_REST_API_RTGS_OUTWARD 
+		(TRAN_REF_NO,
+ 	 	TRAN_DATE,
+ 	 	AMOUNT,
+ 	 	IFSC_SENDER,
+ 	 	IFSC_RECVR,
+ 	 	SUB_MSG_TYPE,
+ 	 	SEQINHEADER,
+ 	 	BANKNAME) VALUES 
+ 	 	(Body.TRANSACTIONREFERENCENUMBER,
+ 	 	Body.VALUEDATE_CURRENCY_AMOUNT.VALUEDATE,
+ 	 	amount,
+ 	 	sendCorrs,
+ 	 	rcvCorr,
+ 	 	msgType,
+ 	 	'',
+ 	 	Environment.bankName
+ 	 	);	 ----------chanage here--------- 
+		
+			-- Inserting data into RTGS_MSG_OUT Table
+				 
+		INSERT INTO Database.RTGS_MSG_OUT (TRAN_REF_NO,SENDER_CORRES,RECVR_CORRES,MSG,TRAN_DATE,BANKNAME,CREATION_TIME) 
+		VALUES ( Body.TRANSACTIONREFERENCENUMBER,
+		sendCorrs,
+		rcvCorr,
+		msg,
+		Body.VALUEDATE_CURRENCY_AMOUNT.VALUEDATE,
+		Environment.bankName,
+		CURRENT_TIMESTAMP
+		);	
+		
+		SET OutputRoot.MQRFH2.usr.bankname=TRIM(Environment.bankName);		 
+	
+	END;
+	/*
+	* This Procedure is used to call property file and get CBS Server directory(SFTP) Map OutputLocalEnvironment 
+	*/ 	
+	CREATE PROCEDURE updateLocalEnv() BEGIN
+		DECLARE key CHARACTER 'key';
+		DECLARE bank CHARACTER TRIM(Environment.bankName);		
+		DECLARE rc BOOLEAN;
+		
+		IF Environment.stype='R41' THEN
+			SET key = bank||'_CBS_OUT_R41';
+		ELSEIF Environment.stype='R42' THEN
+			SET key = bank||'_CBS_OUT_R42';
+--		ELSE
+--			SET key = 'RTGS_RetOUT_Path_'||bank;
+		END IF;
+		
+		DECLARE fileLoc,ftpProvider,queueName,appID CHARACTER;
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Retrieving values from properties file') INTO rc;
+		CALL getProp( PROP_LOC, key,bank, fileLoc, ftpProvider); ----> Retrieving file directory(fileLoc)frm property file
+
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Bank name : '||bank) INTO rc;
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','FTP Provider name : '||ftpProvider) INTO rc;
+		CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','Server directory : '||fileLoc) INTO rc;
+	--	CALL log4j_1_1('DB_INSERT', 'HDFC_RTGS_OUTWARD', 'WARN','App ID : '||appID) INTO rc;
+			
+--MQ--		SET OutputLocalEnvironment.Destination.File.Remote.Server = ftpProvider;
+--MQ--	    SET OutputLocalEnvironment.Destination.File.Remote.ServerDirectory = fileLoc;
+		SET OutputLocalEnvironment.Destination.File.Directory = fileLoc;
+	--	SET OutputLocalEnvironment.Variables.appid = appID;
+	--	SET Environment.Variables.appid = appID;
+
+	END;
+	
+    
+	CREATE PROCEDURE  getProp( IN P1 CHARACTER, IN P2 CHARACTER,IN P7 CHARACTER, INOUT P3 CHARACTER,INOUT P4 CHARACTER )
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.HDFC_RTGS_OUTWARD_JavaCompute.getProperties";
+	
+END MODULE;
+
+	 CREATE FUNCTION initLog4j( IN CONFIG_FILE_NAME CHARACTER )
+     RETURNS BOOLEAN
+     LANGUAGE JAVA
+     EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j"; 
+     
+     CREATE FUNCTION log4j_1_1( IN COMPONENT_NAME CHARACTER,
+                                IN LOGGER_NAME CHARACTER,
+                                IN LEVEL CHARACTER,
+                                IN TEXT CHARACTER )
+     RETURNS BOOLEAN
+     LANGUAGE JAVA
+     EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";
+

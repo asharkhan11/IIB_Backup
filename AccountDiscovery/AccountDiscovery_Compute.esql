@@ -1,0 +1,89 @@
+
+DECLARE var_path EXTERNAL CHARACTER;
+DECLARE var BOOLEAN;
+
+DECLARE dsn CHARACTER '';
+DECLARE bank_code CHARACTER '';
+DECLARE schema_name CHARACTER '';
+
+CREATE COMPUTE MODULE AccountDiscovery_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		CALL init_log4j(var_path) INTO var;
+		CALL write_log(MessageFlowLabel,'acc_dis','INFO','REQUEST : '|| CAST(ASBITSTREAM(InputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;
+	
+
+		IF CONTAINS(InputRoot.HTTPInputHeader."X-Original-HTTP-Command", 'POST') THEN
+
+			IF FIELDNAME(InputRoot.JSON.Data.[1]) = 'bankId' AND FIELDNAME(InputRoot.JSON.Data.[2]) = 'mobileNo' AND FIELDNAME(InputRoot.JSON.Data.[3]) = 'fitype' AND InputRoot.JSON.Data.[4] IS NULL THEN
+
+				DECLARE r ROW;
+
+
+				SET r.data[] = SELECT t.dsn,t.bank_code,t.schema_name FROM Database.ORADSN.SYSTEM.DSN AS t where t.bank_id = InputRoot.JSON.Data.bankId;
+
+				IF r.data.[1] IS NULL THEN
+					SET OutputRoot.JSON.Data.response = 'Invalid Bank ID';
+				ELSE
+					SET dsn = r.data[1].dsn;
+					SET bank_code = r.data[1].bank_code;
+					SET schema_name = r.data[1].schema_name;					
+					
+					SET r = NULL;
+
+					SET r.data.account[] = SELECT t.account_number, t.account_type, t.fi_type FROM Database.{dsn}.{schema_name}.{bank_code} AS t WHERE t.mobile_number = InputRoot.JSON.Data.mobileNo;
+					IF r.data.account.[1] IS NULL THEN
+						SET OutputRoot.JSON.Data.response = 'No Active account for given mobile number';
+					ELSE
+						SET OutputRoot.JSON.Data.status = 'success';
+						DECLARE accountData REFERENCE TO r.data.account[1];
+						CREATE NEXTSIBLING OF OutputRoot.JSON.Data.status TYPE JSON.Array NAME 'accounts';
+						DECLARE accRef REFERENCE TO OutputRoot.JSON.Data.accounts;
+
+						WHILE LASTMOVE(accountData) DO
+
+							CREATE LASTCHILD OF accRef TYPE JSON.Object;
+
+							SET accRef.[<].accountNumber = accountData.account_number;
+							SET accRef.[<].accType = accountData.account_type;
+							SET accRef.[<].fiType = accountData.fi_type;
+
+							MOVE accountData NEXTSIBLING;
+						END WHILE;
+
+
+					END IF;
+
+				END IF;	
+				CALL write_log(MessageFlowLabel,'acc_dis','INFO','RESPONSE : '|| CAST(ASBITSTREAM(OutputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;			
+
+			ELSE
+				SET OutputRoot.JSON.Data.response = 'Input Request is Invalid';
+				CALL write_log(MessageFlowLabel,'acc_dis','INFO',' ------------------------START----------------------') INTO var;
+				CALL write_log(MessageFlowLabel,'acc_dis','ERROR','Input Request is Invalid. INPUT DATA : ' || CAST(ASBITSTREAM(InputRoot.JSON.Data) as CHARACTER CCSID 1208)) INTO var;
+				CALL write_log(MessageFlowLabel,'acc_dis','INFO',' ------------------------END----------------------') INTO var;
+			END IF;
+
+
+		ELSE
+
+			SET OutputRoot.JSON.Data.response = 'Invalid HTTP method';
+			CALL write_log(MessageFlowLabel,'acc_dis','INFO',' ------------------------START----------------------') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_dis','ERROR','Invalid HTTP method') INTO var;
+			CALL write_log(MessageFlowLabel,'acc_dis','INFO',' ------------------------END----------------------') INTO var;
+
+		END IF;
+		RETURN TRUE;
+	END;
+
+END MODULE;
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";

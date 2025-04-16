@@ -1,0 +1,33 @@
+# Eclipse settings
+.classpath
+.project
+.settings/
+
+# ACE/IIB generated files
+*.bar
+*.cmf
+*.subflow_cmf
+*.esqlc
+*.msgflowtrace
+*.msgflowusertrace
+*.brokertrace
+*.trace
+*.exceptions
+*.dictionary
+*.resources.zip
+
+# Toolkit metadata and temp files
+.metadata/
+metadata/
+*metadata/
+*.log
+tmp/
+target/
+run/
+ace_workspace/
+executiongroup/
+deploy/
+
+# OS specific
+.DS_Store
+Thumbs.db

@@ -1,0 +1,84 @@
+BROKER SCHEMA com.cedge.inward.response.process
+PATH com.cedge.hdfc.rtgs.out;
+
+CREATE COMPUTE MODULE XMLRES_TO_CBS_Compute
+	DECLARE DSNNAME EXTERNAL CHARACTER;
+	DECLARE SCHEMANAME EXTERNAL CHARACTER;
+	DECLARE RTGS_OUT_TABLENAME EXTERNAL CHARACTER;
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		   CALL CopyEntireMessage();
+		   SET OutputRoot.Properties.MessageSet='HDFC_API_RESPONSE_TO_CBS';
+		   
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		DECLARE rc BOOLEAN ;
+  		DELETE LASTCHILD OF InputRoot.XMLNSC.response;
+	  	SET OutputRoot= InputRoot;
+	  	DECLARE tranrefnum CHARACTER InputRoot.XMLNSC.response.faxml.paymentlist.payment.paymentrefno;
+		DECLARE q ROW;
+		SET q.values[] =PASSTHRU('SELECT * FROM HDFC_REST_API_RTGS_OUTWARD WHERE HDFC_TRAN_REF = ?' TO Database.{DSNNAME} VALUES(tranrefnum));
+		SET OutputRoot.XMLNSC.response.faxml.paymentlist.payment.paymentrefno = q.values.HDFC_TRAN_REF;
+ 		SET OutputRoot.XMLNSC.response.faxml.paymentlist.payment.custuniqno = q.values.HDFC_TRAN_REF;
+--AJ--	DELETE FIELD OutputRoot.XMLNSC.response.faxml.paymentlist.payment.paymentrefno;
+	  	 
+	  	DECLARE codstatus ,Orgdate,Orgtime,SenderIfsc,ReceiverIfsc,UTR,Qry,Updateqry,Reason CHARACTER;
+	  	DECLARE DB_Details,ref ROW;
+		DECLARE whiteSpace CONSTANT CHARACTER CAST( X'090D0A20' AS CHAR CCSID 1208);
+--AJ-- 	SET codstatus = InputRoot.MRM.faxml.header.codstatus; 
+	  	SET codstatus = InputRoot.XMLNSC.response.faxml.header.codstatus; 
+	  	SET UTR =q.values.HDFC_TRAN_REF;
+--AJ-- 	SET UTR = InputRoot.MRM.faxml.paymentlist.payment.paymentrefno;
+	    SET Orgdate = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyyMMdd'); 
+	    SET Orgtime = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'HH:mm');
+	    SET Orgtime = REPLACE(Orgtime,':','');
+--AJ--  SET Reason = InputRoot.MRM.faxml.header.txtstatus;
+		SET Reason = InputRoot.XMLNSC.response.faxml.header.txtstatus;  
+	    
+	   	CALL log4j_1_1('VALIDATING PAYLOD', 'HDFC_RTGS_RESPONSE', 'WARN','TxtStatus: '||Reason) INTO rc;
+-- 		CALL log4j_1_1('VALIDATING PAYLOD', 'HDFC_RTGS_RESPONSE', 'WARN','Codstatus: '||codstatus) INTO rc; 
+------------------------------------------------------------------------------------------------	    
+-- 		SET Qry = 'SELECT SENDER_CORRES,RECVR_CORRES,BANKNAME  FROM '||SCHEMANAME||'.'||RTGS_OUT_TABLENAME||' A WHERE TRIM(A.HDFC_TRAN_REF)= ?';
+-- 		SET DB_Details.A[] = PASSTHRU(Qry TO Database.{DSNNAME} VALUES(UTR));
+		
+--		SET SenderIfsc = DB_Details.A[1].RECVR_CORRES;
+--		SET ReceiverIfsc = DB_Details.A[1].SENDER_CORRES;
+--		SET Environment.BANKNAME = DB_Details.A[1].BANKNAME;
+------------------------------------------------------------------------------------------------------------------		
+		
+		SET SenderIfsc = q.values.IFSC_RECVR;
+		SET ReceiverIfsc = q.values.IFSC_SENDER;
+		SET Environment.BANKNAME = q.values.BANKNAME;
+		
+		SET OutputLocalEnvironment.Variables.DetailsR90.OriginateDate=Orgdate;
+		SET OutputLocalEnvironment.Variables.DetailsR90.OriginateTime=Orgtime; 
+		SET OutputLocalEnvironment.Variables.DetailsR90.SenderIFSC=TRIM(whiteSpace FROM SenderIfsc);
+		SET OutputLocalEnvironment.Variables.DetailsR90.ReceiverIFSC=TRIM(whiteSpace FROM ReceiverIfsc);
+		SET OutputLocalEnvironment.Variables.DetailsR90.Reason=Reason;
+		
+		IF  codstatus <> 0 AND NOT CONTAINS(Reason,'ACCEPTED') THEN 
+		SET OutputLocalEnvironment.Variables.DetailsR90.ACK_Indicator='N';
+		SET Environment.Transaction_Status = 'N';
+		SET Updateqry = 'UPDATE HDFC_REST_API_RTGS_OUTWARD SET ACKNACKTYPE = ''N90'', REASON = ? WHERE TRIM(HDFC_TRAN_REF) = ?';
+		SET ref.A[] = PASSTHRU(Updateqry TO Database.{DSNNAME} VALUES(Reason,UTR)); 
+		ELSE
+		SET OutputLocalEnvironment.Variables.DetailsR90.ACK_Indicator='Y';	
+		SET Environment.Transaction_Status = 'P';
+		SET Updateqry = 'UPDATE HDFC_REST_API_RTGS_OUTWARD SET ACKNACKTYPE = ''P90'', REASON = ? WHERE TRIM(HDFC_TRAN_REF) = ?';
+		SET ref.A[] = PASSTHRU(Updateqry TO Database.{DSNNAME} VALUES(Reason,UTR)); 
+		END IF;	 
+	END;
+END MODULE;

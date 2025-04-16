@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><mappingRoot xmlns="http://www.ibm.com/2008/ccl/Mapping" domainID="com.ibm.msl.mapping.xml" domainIDExtension="mb" mainMap="true" targetNamespace="com.cedge.inward.response.process" version="8.0.5.0" xmlns:map="com.cedge.inward.response.process">
+    <input path="/HDFC_API_RESPONSE_TO_CBS/API_RES_TO_CBS.mxsd"/>
+    <output path="/N06/OUTWARD.xsd" var="var"/>
+    <namespaces>
+        <namespace kind="extension" prefix="fn" uri="http://www.w3.org/2005/xpath-functions"/>
+    </namespaces>
+    <generation engine="xquery"/>
+    <mappingDeclaration name="APIXML_TO_R90">
+        <input path="mb:msg(response,assembly,,LocalEnvironment,Properties)" var="MessageAssembly">
+            <cast path="$MessageAssembly/LocalEnvironment/Variables/any" qualifier="DetailsR90" ref="var"/>
+        </input>
+        <output path="$var/mb:msg(R90,assembly,DFDL,Properties)" var="MessageAssembly1"/>
+        <move>
+            <input path="$MessageAssembly/Properties"/>
+            <output path="$MessageAssembly1/Properties"/>
+            <override>
+                <assign value="{}:R90">
+                    <output path="$MessageAssembly1/Properties/MessageType"/>
+                </assign>
+            </override>
+        </move>
+        <move>
+            <input path="$MessageAssembly/response/faxml/paymentlist/payment/paymentrefno"/>
+            <output path="$MessageAssembly1/R90/body/Transaction_Reference_Number"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/response/faxml/header/codstatus"/>
+            <output path="$MessageAssembly1/R90/body/Reason_Code"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/response/faxml/paymentlist/payment/paymentrefno"/>
+            <output path="$MessageAssembly1/R90/Header/MUR"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/response/faxml/paymentlist/payment/paymentrefno"/>
+            <output path="$MessageAssembly1/R90/Header/Unique_Transaction_Number"/>
+        </move>
+        <assign value="XXXXXXXXX">
+            <output path="$MessageAssembly1/R90/Header/Filler"/>
+        </assign>
+        <assign value="000000000">
+            <output path="$MessageAssembly1/R90/Header/Sequence_Number"/>
+        </assign>
+        <assign value="2">
+            <output path="$MessageAssembly1/R90/Header/Testing_Training_Flag"/>
+        </assign>
+        <assign value="RTG">
+            <output path="$MessageAssembly1/R90/Header/BankApp_Identifier"/>
+        </assign>
+        <assign value="F01">
+            <output path="$MessageAssembly1/R90/Header/Message_Identifier"/>
+        </assign>
+        <assign value="I">
+            <output path="$MessageAssembly1/R90/Header/IO_Identifier"/>
+        </assign>
+        <assign value="298">
+            <output path="$MessageAssembly1/R90/Header/Message_Type"/>
+        </assign>
+        <assign value="R90">
+            <output path="$MessageAssembly1/R90/Header/SubMessage_Type"/>
+        </assign>
+        <assign value="2">
+            <output path="$MessageAssembly1/R90/Header/Delivery_Monitoring_Flag"/>
+        </assign>
+        <assign value="2">
+            <output path="$MessageAssembly1/R90/Header/Open_Notification_Number"/>
+        </assign>
+        <assign value="2">
+            <output path="$MessageAssembly1/R90/Header/NonDelivery_Warning_Flag"/>
+        </assign>
+        <assign value="000">
+            <output path="$MessageAssembly1/R90/Header/Obsolescence_Period"/>
+        </assign>
+        <assign value="2">
+            <output path="$MessageAssembly1/R90/Header/Possible_Duplicate_Flag"/>
+        </assign>
+        <assign value="RTG">
+            <output path="$MessageAssembly1/R90/Header/Service_Identifier"/>
+        </assign>
+        <assign value="99">
+            <output path="$MessageAssembly1/R90/Header/RTGS_Priority"/>
+        </assign>
+        <move>
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/OriginateDate"/>
+            <output path="$MessageAssembly1/R90/Header/Originate_Date"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/OriginateTime"/>
+            <output path="$MessageAssembly1/R90/Header/Originate_Time"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/SenderIFSC"/>
+            <output path="$MessageAssembly1/R90/Header/Sender_IFSC"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/ReceiverIFSC"/>
+            <output path="$MessageAssembly1/R90/Header/Receiver_IFSC"/>
+        </move>
+        <move>
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/ACK_Indicator"/>
+            <output path="$MessageAssembly1/R90/body/Acknowledgement_Indicator"/>
+        </move>
+        <assign value="{A:">
+            <output path="$MessageAssembly1/R90/Header/Block_A_Identifier"/>
+        </assign>
+        <assign value="}">
+            <output path="$MessageAssembly1/R90/Header/Block_A_End_Identifer"/>
+        </assign>
+        <assign value="{4:">
+            <output path="$MessageAssembly1/R90/body/Block_4_Initiator"/>
+        </assign>
+        <function ref="fn:substring">
+            <input path="$MessageAssembly/LocalEnvironment/Variables/DetailsR90/Reason" var="Reason"/>
+            <output path="$MessageAssembly1/R90/body/Reason_Description"/>
+            <param name="sourceString" value="$Reason"/>
+            <param name="startLocation" value="1"/>
+            <param name="length" value="30"/>
+        </function>
+    </mappingDeclaration>
+</mappingRoot>

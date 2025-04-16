@@ -1,0 +1,76 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+PATH com.cedge.hdfc.rtgs.out;
+
+CREATE COMPUTE MODULE HDFC_RTGS_OUTWARD_GATEWAY
+	DECLARE Log4jConfighFilePath EXTERNAL CHARACTER '';
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		SET OutputRoot = InputRoot;
+		DECLARE UTR CHARACTER;
+-- 		DECLARE sType CHARACTER FIELDNAME(InputRoot.DFDL.*);
+		SET UTR = InputRoot.DFDL.*.Header.MUR;
+		SET OutputRoot.MQRFH2.usr.filename = UTR||'.RTGS'; 
+		SET OutputLocalEnvironment.Destination.File.Name = UTR||'.RTGS';
+		propagate to TERMINAL 'out1'; 
+		
+----	============================ PAYLOAD LOGGING ==================================================================
+		
+		DECLARE CR CHAR CAST(CAST('X''0A''' AS BLOB) AS CHAR CCSID 1208);
+		DECLARE CCSIDNO,ENCOADINGNO INTEGER;
+		SET CCSIDNO = InputRoot.Properties.CodedCharSetId;
+		SET ENCOADINGNO =InputRoot.Properties.Encoding;
+     	DECLARE PAYLOAD CHARACTER CAST (ASBITSTREAM(InputBody ENCODING ENCOADINGNO CCSID CCSIDNO) AS CHARACTER CCSID CCSIDNO ENCODING ENCOADINGNO);
+		DECLARE rc BOOLEAN;
+		CALL initLog4j(Log4jConfighFilePath) INTO rc;
+-- 		CALL initLog4j('/var/iib/interface/hdfc/neft/inward/properties/log4j/hdfc_neft_rgts_log4j.xml') INTO rc;
+				
+		CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','-------------------------------------START-------------------------------------') INTO rc;
+		CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','File received from CBS ') INTO rc;
+		CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','UTR '||InputRoot.DFDL.*.Header.MUR) INTO rc;
+		CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','MSG TYPE : '||FIELDNAME(InputRoot.DFDL.*)) INTO rc;
+		CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','File Name : '||InputRoot.MQRFH2.usr.UFM_FileName) INTO rc;
+--AJ-- 	CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','RTGS_MESSAGE_FROM_CBS: '||CR||'=============REQUEST START==========='||CR||PAYLOAD||CR||'=============REQUEST END===============') INTO rc;
+
+----	============================ PAYLOAD LOGGING ==================================================================		
+		CALL CopyMessageHeaders(); ----> IT WILL PRINT ALL HEADERS 
+		CALL CopyEntireMessage();
+		DECLARE ExcRef REFERENCE TO InputExceptionList.*;
+		IF NOT LASTMOVE(ExcRef) THEN
+			CALL log4j_1_1('RTGS_OUT_GATEWAY', 'HDFC_RTGS_OUTWARD_GATEWAY', 'WARN','--------------------------------------END--------------------------------------') INTO rc;	
+		END IF;
+--MQ--		CALL CopyMessageHeaders();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		
+--MQ--		SET OutputRoot.Properties = InputRoot.Properties;
+--MQ--		CREATE NEXTSIBLING OF "OutputRoot"."Properties" DOMAIN 'MQMD' NAME 'MQMD';
+--MQ--		SET OutputRoot.MQMD.Format = 'MQHRF2';
+--MQ--		CREATE NEXTSIBLING OF "OutputRoot"."MQMD" DOMAIN 'MQRFH2' NAME 'MQRFH2';
+--MQ--		SET OutputRoot.MQRFH2.(MQRFH2.Field)Version = 2;
+--MQ--		SET OutputRoot.MQRFH2.(MQRFH2.Field)Format = 'MQSTR';
+--MQ--		SET OutputRoot.MQRFH2.(MQRFH2.Field)NameValueCCSID = 1208;
+		
+--MQ--		SET OutputRoot.MQRFH2.usr.filename = InputLocalEnvironment.File.Name;
+		DECLARE UTR CHARACTER;
+		DECLARE sType CHARACTER FIELDNAME(InputRoot.DFDL.*);
+		SET OutputRoot.MQRFH2.usr.messagetype = sType;
+		SET UTR = InputRoot.DFDL.*.Header.MUR;
+		SET OutputRoot.MQRFH2.usr.filename = UTR||'.RTGS'; 
+		SET OutputRoot.DFDL = InputRoot.DFDL;
+		
+	END;
+END MODULE;
+

@@ -1,0 +1,33 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+
+
+CREATE COMPUTE MODULE UpdateStatus
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+	
+	CALL updateStatus ( );
+	
+		RETURN TRUE;
+	END;
+	
+	CREATE PROCEDURE updateStatus ( )
+	BEGIN
+		DECLARE rc BOOLEAN; 
+		UPDATE Database.RTGS_OUT_PAYLOAD as T
+			SET
+			LAST_MOD_TIME = CURRENT_TIMESTAMP,
+			STATUS = 'S'
+			WHERE
+			TRIM(T.TXN_REF_NUM) = Environment.tranrefNo;
+    CALL log4j_1_1('UPDATE', 'HDFC_RTGS_OUTWARD', 'WARN','RTGS_OUT_PAYLOAD STATUS IS UPDATED TO : S ') INTO rc;
+	
+	------*************************TO KNOW MSG SEND TO HDFC OR NOT ***********************------------------------------	   
+	   UPDATE Database.HDFC_REST_API_RTGS_OUTWARD as H
+			SET OUT_MSG_SENT_SBI = 'Y'
+			WHERE
+			H.HDFC_TRAN_REF = Environment.TransactionId;
+		 CALL log4j_1_1('UPDATE', 'HDFC_RTGS_OUTWARD', 'WARN','--------------------------------------------END---------------------------------------') INTO rc;	
+	 
+	
+	END;
+END MODULE;

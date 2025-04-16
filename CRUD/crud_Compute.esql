@@ -1,0 +1,126 @@
+
+--DECLARE var_path CHARACTER 'C:\temp\logs\Log4jConfigurationFile.xml';
+DECLARE var_path EXTERNAL CHARACTER;
+DECLARE var BOOLEAN;
+
+
+
+CREATE COMPUTE MODULE crud_Compute
+
+	DECLARE r ROW;	
+
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		DECLARE EXIT HANDLER FOR SQLSTATE LIKE'%'
+		BEGIN
+
+			SET OutputRoot.XMLNSC.error.mySQLCODE = SQLCODE;
+			SET OutputRoot.XMLNSC.error.mySQLSTATE = SQLSTATE;
+			SET OutputRoot.XMLNSC.error.mySQLNATIVEERROR = SQLNATIVEERROR;
+			SET OutputRoot.XMLNSC.error.mySQLERRORTEXT = SQLERRORTEXT;
+			
+			CALL write_log(MessageFlowLabel,'dco_error','ERROR','ERROR DETAILS : ' || CAST(ASBITSTREAM(OutputRoot.XMLNSC) AS CHARACTER CCSID 1208 ) ) INTO var;
+			
+		END;	
+
+		CALL init_log4j(var_path) INTO var;
+		DECLARE data CHARACTER CAST(ASBITSTREAM(InputRoot.XMLNSC) AS CHARACTER CCSID 1208);
+		
+	
+		CALL write_log(MessageFlowLabel,'dco_info','INFO','REQUEST BODY : ' || data ) INTO var;
+		CALL CopyEntireMessage();
+		
+		SET data = CAST(ASBITSTREAM(OutputRoot.XMLNSC) AS CHARACTER CCSID 1208);
+		CALL write_log(MessageFlowLabel,'dco_info','INFO','RESPONSE BODY : ' || data ) INTO var;
+		
+		RETURN TRUE;
+	END;
+
+	DECLARE inRef REFERENCE TO InputRoot.XMLNSC.root;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+
+		if inRef.op = 'GET' THEN
+			-- DECLARE r ROW;
+			DECLARE flag BOOLEAN;
+			CALL write_log(MessageFlowLabel,'dco_debug','DEBUG','called getData() method') INTO var;
+			CALL getData(inRef.id) INTO flag;
+
+		elseif inRef.op = 'POST' THEN
+			DECLARE flag BOOLEAN;
+			CALL write_log(MessageFlowLabel,'dco_debug','DEBUG','called storeData() method') INTO var;
+			CALL storeData(inRef.id, inRef.data) INTO flag;
+			SET OutputRoot.XMLNSC.response = flag;
+
+		elseif inRef.op = 'PUT' THEN
+			DECLARE flag BOOLEAN;
+			CALL write_log(MessageFlowLabel,'dco_debug','DEBUG','called updateData() method') INTO var;
+			CALL updateData(inRef.id, inRef.data) INTO flag;
+			SET OutputRoot.XMLNSC.response = flag;
+		ELSEif inRef.op = 'DELETE' then
+			DECLARE flag BOOLEAN;
+			CALL write_log(MessageFlowLabel,'dco_debug','DEBUG','called deleteData() method') INTO var;
+			CALL deleteData(inRef.id) INTO flag;
+			SET OutputRoot.XMLNSC.response = flag;
+		else
+			CALL write_log(MessageFlowLabel,'dco_warn','WARN','specified operation is invalid : ' || inRef.op) INTO var;
+			Set OutputRoot.XMLNSC.response = 'invalid operation';
+		end if;
+	END;
+
+	CREATE FUNCTION getData (IN id CHARACTER) RETURNS BOOLEAN
+	BEGIN
+		DECLARE r ROW;
+
+
+		IF inRef.id = 'ALL' THEN
+			SET r.data[] = SELECT * FROM Database.crud as c ;
+		ELSE
+			SET r.data[] = SELECT * FROM Database.crud as c where c.data_id = id;
+		END IF;
+
+		SET OutputRoot.XMLNSC.response = r;
+
+		return true;
+	END;
+
+
+	CREATE FUNCTION storeData (IN id CHARACTER, IN msg CHARACTER) RETURNS BOOLEAN
+	BEGIN
+
+		INSERT INTO Database.crud (data_id, msg) VALUES (id, msg);
+
+		return true;
+	END;
+
+	CREATE FUNCTION updateData (IN id CHARACTER,IN data CHARACTER) RETURNS BOOLEAN
+	BEGIN
+
+		UPDATE Database.crud AS c SET msg = data WHERE c.data_id = id;
+
+		return true;
+	END;
+
+
+	CREATE FUNCTION deleteData (IN id CHARACTER) RETURNS BOOLEAN
+	BEGIN
+
+		DELETE FROM Database.crud AS c WHERE c.data_id = id;
+
+		return true;
+	END;
+
+
+END MODULE;
+
+
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";

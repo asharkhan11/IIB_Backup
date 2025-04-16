@@ -1,0 +1,108 @@
+Request:
+
+<faxml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="CO_STR.xsd">
+    <header>
+        <extsysname>COAPI</extsysname>
+        <datpost>2023-12-04</datpost>
+        <batchnumext>102544</batchnumext>
+        <idtxn>CO_STR</idtxn>
+        <codcurr>INR</codcurr>
+        <iduser>APIUSER</iduser>
+        <idcust>10668483</idcust>
+        <groupid>FINGROWTH</groupid>
+        <reqdatetime>2023-12-04T14:23:18</reqdatetime>
+    </header>
+    <summary>
+        <orgcountpmt>1</orgcountpmt>
+        <orgsumpmt>30000.00</orgsumpmt>
+    </summary>
+    <paymentlist>
+        <payment>
+            <stanext>2</stanext>
+            <refstan>1</refstan>
+            <paymentrefno>5000043830102544</paymentrefno>
+            <accounttype>CU</accounttype>
+            <accountno>0001011000033</accountno>
+            <ifsccode>BARB0NIWARU</ifsccode>
+            <txndate>2023-12-04</txndate>
+            <amount>30000.00</amount>
+            <custdet>AJAY,KUMAR</custdet>
+            <benefaccountno>14708000389</benefaccountno>
+            <benefcustdet>HYD</benefcustdet>
+            <custuniqno>5000043830102544</custuniqno>
+            <custdetadd1>HDFC BANK</custdetadd1>
+            <custdetadd2>ANDHERI CHANDIVALI MUMBAI 72</custdetadd2>
+            <clientrefno>5000043830102544</clientrefno>
+            <forcedebit>N</forcedebit>
+            <RemitInformation_1>CIT Bank</RemitInformation_1>
+            <paydetail>LOAN DISBURSEMENT</paydetail>
+        </payment>
+    </paymentlist>
+</faxml>
+
+
+Response:
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+    <faxml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Id="0myptqKhes6w7ZsdW3KQXYYFtohEXLGP" xsi:noNamespaceSchemaLocation="CO_STR.xsd">
+        <header>
+            <batchnum>20233381214230088</batchnum>
+            <batchnumext>102544</batchnumext>
+            <codcurr>INR</codcurr>
+            <codstatus>0</codstatus>
+            <datpost>2023-12-04</datpost>
+            <extsysname>COAPI</extsysname>
+            <groupid>FINGROWTH</groupid>
+            <idcust>10668483</idcust>
+            <idtxn>CO_STR</idtxn>
+            <iduser>APIUSER</iduser>
+            <reqdatetime>2023-12-04T14:23:18</reqdatetime>
+            <txtstatus>ACCEPTED</txtstatus>
+        </header>
+        <summary>
+            <orgcountpmt>1</orgcountpmt>
+            <orgsumpmt>30000.00</orgsumpmt>
+        </summary>
+        <paymentlist>
+            <payment>
+                <stanext>2</stanext>
+                <refstan>1</refstan>
+                <paymentrefno>5000043830102544</paymentrefno>
+                <accounttype>CU</accounttype>
+                <accountno>0001011000033</accountno>
+                <ifsccode>BARB0NIWARU</ifsccode>
+                <txndate>2023-12-04</txndate>
+                <amount>30000.00</amount>
+                <custdet>AJAY,KUMAR</custdet>
+                <benefaccountno>14708000389</benefaccountno>
+                <benefcustdet>HYD</benefcustdet>
+                <custuniqno>5000043830102544</custuniqno>
+                <custdetadd1>HDFC BANK</custdetadd1>
+                <custdetadd2>ANDHERI CHANDIVALI MUMBAI 72</custdetadd2>
+                <clientrefno>5000043830102544</clientrefno>
+                <paydetail>LOAN DISBURSEMENT</paydetail>
+                <forcedebit>N</forcedebit>
+                <RemitInformation_1>CIT Bank</RemitInformation_1>
+            </payment>
+        </paymentlist>
+    </faxml>
+    <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+        <SignedInfo>
+            <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+            <SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+            <Reference URI="#0myptqKhes6w7ZsdW3KQXYYFtohEXLGP">
+                <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <DigestValue>riAZoI8kd3/UGKQQGj8A+PeTMj9WeEj5/77+6BFlrvU=</DigestValue>
+            </Reference>
+        </SignedInfo>
+        <SignatureValue>LYCxfbXpaSmXDAFd22mqpQ82jWIQI4T6c4DCzgrkevx9cofYwE6D8Kmu0NxCZ/5iDLheRwvn8tyN&#xD;G+yDwbJy+V+xzTL7Lxckr7QORIKaFQ0gn1yMAONNuoLQZJIg4qygRtVvdT1jOLFoh31KGG2tAtFm&#xD;ZrF/rYkpPooVa8jJfOYuoKtmWHdKbn/BpMitAsgBciz8iIOAeHT3BktaKaZ7wtvhXdpKBghdU30i&#xD;v7xp54AbrwZMBm9xXc8AuT8UjKJ3+6vSnIhps3HjVsQCByeb9/vTBqpjn/6sIODMD8Lqhx/l/vU4&#xD;oiUiwubMSx+uB6E5gJIZu6H4eEJrecxV9xR8Hg==</SignatureValue>
+        <KeyInfo>
+            <X509Data>
+                <X509SubjectName>CN=api-uat.hdfcbank.com,O=Hdfc Bank Limited,L=Mumbai,ST=Maharashtra,C=IN,2.5.4.5=#1306303830363138,2.5.4.15=#0c1450726976617465204f7267616e697a6174696f6e,1.3.6.1.4.1.311.60.2.1.3=#1302494e</X509SubjectName>
+                <X509Certificate>MIIG5TCCBc2gAwIBAgIQB6fKb+9mDT2BhhbyaJmxVTANBgkqhkiG9w0BAQsFADBhMQswCQYDVQQG&#xD;EwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSAw&#xD;HgYDVQQDExdHZW9UcnVzdCBFViBSU0EgQ0EgMjAxODAeFw0yMzAyMTUwMDAwMDBaFw0yNDAzMTcy&#xD;MzU5NTlaMIG0MRMwEQYLKwYBBAGCNzwCAQMTAklOMR0wGwYDVQQPDBRQcml2YXRlIE9yZ2FuaXph&#xD;dGlvbjEPMA0GA1UEBRMGMDgwNjE4MQswCQYDVQQGEwJJTjEUMBIGA1UECBMLTWFoYXJhc2h0cmEx&#xD;DzANBgNVBAcTBk11bWJhaTEaMBgGA1UEChMRSGRmYyBCYW5rIExpbWl0ZWQxHTAbBgNVBAMTFGFw&#xD;aS11YXQuaGRmY2JhbmsuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtUlK8MdC&#xD;zJb5ROqmfW6B/KnXsAhWaHM8JNV3XmY0yyzZw4QsQKaqGoAvujKSwQeS1Uq+uJGcRXvmoWrMlqWA&#xD;cLeGxswGCCVptS/gu2JP/hQ+r3bo7Xv9Jb4KdVQN7IGJUt9BZ4lb9tWRjgseSTNxsicFUpVj68Xw&#xD;+ZWYZXdhARm3TtkhYmNKuMstVe9rA7dTQdAj9D/MJFZ7r+axC9n0uj6M6I2QdS5EoV+Bvoerb669&#xD;duen6dvgFBRJSp93dO0WpotJT+z9oeCbJEUIxgK/Td/mjUWgD0+DbR8KIkZ9OLCB2rFXH0UzkLCE&#xD;pooWeGW7ZA8nmsU7/eQrPBcx3EdUxwIDAQABo4IDQzCCAz8wHwYDVR0jBBgwFoAUypJnUmHervy6&#xD;Iit/HIdMJftvmVgwHQYDVR0OBBYEFDELkzv+n0k9q5yMbpkNLv8BBYqHMDkGA1UdEQQyMDCCFGFw&#xD;aS11YXQuaGRmY2JhbmsuY29tghh3d3cuYXBpLXVhdC5oZGZjYmFuay5jb20wDgYDVR0PAQH/BAQD&#xD;AgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjBABgNVHR8EOTA3MDWgM6Axhi9odHRw&#xD;Oi8vY2RwLmdlb3RydXN0LmNvbS9HZW9UcnVzdEVWUlNBQ0EyMDE4LmNybDBKBgNVHSAEQzBBMAsG&#xD;CWCGSAGG/WwCATAyBgVngQwBATApMCcGCCsGAQUFBwIBFhtodHRwOi8vd3d3LmRpZ2ljZXJ0LmNv&#xD;bS9DUFMwdwYIKwYBBQUHAQEEazBpMCYGCCsGAQUFBzABhhpodHRwOi8vc3RhdHVzLmdlb3RydXN0&#xD;LmNvbTA/BggrBgEFBQcwAoYzaHR0cDovL2NhY2VydHMuZ2VvdHJ1c3QuY29tL0dlb1RydXN0RVZS&#xD;U0FDQTIwMTguY3J0MAkGA1UdEwQCMAAwggF/BgorBgEEAdZ5AgQCBIIBbwSCAWsBaQB3AHb/iD8K&#xD;tvuVUcJhzPWHujS0pM27KdxoQgqf5mdMWjp0AAABhlPx5swAAAQDAEgwRgIhAIuHr4BrcfZlHllU&#xD;VIcmO6wcc4zGX18g/ujglPB5tO0PAiEAi3H6tBOiJWLzSToWNvD8kHqr+RjF60r3a18TYr7Yim4A&#xD;dgBz2Z6JG0yWeKAgfUed5rLGHNBRXnEZKoxrgBB6wXdytQAAAYZT8ebxAAAEAwBHMEUCIAR1iEJ8&#xD;dGYGZtQ84vnGwFHm4B38rXjQJyDzGAKDyF4yAiEA7z6wac/KBcP3TC+LCsVCSMtgRk6Fjd/USOyT&#xD;Z0rzlcoAdgBIsONr2qZHNA/lagL6nTDrHFIBy1bdLIHZu7+rOdiEcwAAAYZT8ebFAAAEAwBHMEUC&#xD;IQC4x2W8X33JP5Dt0L4eQIqL29fsMKpXygNTeyQXRQ1SNQIgZgdo3HLG1lfJFAYX25v89ehiwp+B&#xD;/qW/3Yw2Zd4L0wQwDQYJKoZIhvcNAQELBQADggEBADj4k83SoyQdRKzpwmIAhV6lNFsb6Uckbx4Z&#xD;CBWIAKA/UUbOkNM5wZcBgE5aVo3vckMIAAYvQ6o8tsHckr1llJO+89ejoWuXf7V6VoSfwgq4HbRg&#xD;h/+M51mMefXZW7d9zw7WfIkueTR5f8u0lHt67HgwxvYkXHF9FeZba8EjGYlSZgncGaVjLdvXabVP&#xD;i9aBGMg3cFy7dUCQaMJW/tF50dGX3StVsQyN6OLxu74PNs/jtz6nXxqa7KRszyoJG0aHIoByowHi&#xD;fijZkvS+SUciqu/aeX7VFVbtYw7r6kSTsbvTx1NtgtO0FhkRsacpGdQG3PqT4fZrYfeRcpa/VxEt&#xD;3rw=</X509Certificate>
+            </X509Data>
+        </KeyInfo>
+    </Signature>
+</response>

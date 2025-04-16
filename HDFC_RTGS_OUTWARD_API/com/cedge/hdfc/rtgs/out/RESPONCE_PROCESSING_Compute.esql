@@ -1,0 +1,69 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+
+PATH com.cedge.hdfc.rtgs.out;
+CREATE COMPUTE MODULE RESPONCE_PROCESSING_Compute
+	DECLARE PROP_LOC EXTERNAL CHARACTER;
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		   CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+-- 		SET OutputRoot = InputRoot;
+        DECLARE rc BOOLEAN ;
+ 		CALL log4j_1_1(MessageFlowLabel, 'HDFC_RTGS_RESPONSE', 'WARN','---------------------------------------START--------------------------------------------------') INTO rc; 
+        DECLARE jksprivate,p12pass,al,jksfilepublic,pubpass,pubalias CHARACTER; 
+		DECLARE randomdata, signeddata, rawdata CHARACTER;	
+		DECLARE whiteSpace CONSTANT CHARACTER CAST( X'090D0A20' AS CHAR CCSID 1208);
+		DECLARE CRLF, CR, LF CHARACTER;
+	    SET CRLF  = CAST(X'0D0A' AS CHARACTER CCSID 1208);
+		SET CR    = CAST(X'0D' AS CHARACTER CCSID 1208);
+		SET LF    = CAST(X'0A' AS CHARACTER CCSID 1208);
+		
+		Declare Json_Payload CHARACTER CAST(ASBITSTREAM(InputRoot.JSON.Data CCSID InputRoot.Properties.CodedCharSetId)AS CHARACTER CCSID InputRoot.Properties.CodedCharSetId ENCODING InputRoot.Properties.Encoding);
+		CALL log4j_1_1('RESPONCE_PROCESSING', 'HDFC_RTGS_RESPONSE', 'WARN','Payment_URL_Response :- ' || Json_Payload  ) INTO rc;
+        SET signeddata = InputRoot.JSON.Data.ResponseSignatureEncryptedValue; 
+        SET randomdata = InputRoot.JSON.Data.GWSymmetricKeyEncryptedValue;	
+        DECLARE bank CHARACTER 'FCB';  
+        
+        CALL getsigndata(PROP_LOC,bank, jksprivate, p12pass,al,jksfilepublic,pubpass,pubalias);
+        SET Environment.jksprivate = jksprivate;
+		SET Environment.p12pass = p12pass;
+		SET Environment.al = al;
+		
+        
+    	CALL decrypteddata(Environment.p12pass,Environment.jksprivate,Environment.al,randomdata,signeddata,rawdata);
+	 	SET Environment.Finaldata = rawdata;   
+		SET rawdata = TRIM(whiteSpace FROM rawdata);
+		SET rawdata = REPLACE(rawdata ,CRLF,'');
+		SET rawdata = REPLACE(rawdata ,CR,'');
+		SET rawdata = REPLACE(rawdata ,LF,''); 
+		DECLARE Xmlresponsemsg BLOB;
+		SET Xmlresponsemsg = CAST (rawdata AS BLOB CCSID 1208); 
+		SET OutputRoot.BLOB.BLOB = Xmlresponsemsg;
+		DECLARE hdfc_trn_ref_no CHARACTER SUBSTRING(rawdata AFTER '<paymentrefno>' FOR 16);
+		CALL log4j_1_1('RESPONSE_PROCESSING', 'HDFC_RTGS_RESPONSE', 'WARN','HDFC_TRN_REF_NO :- ' || hdfc_trn_ref_no ) INTO rc;
+		CALL log4j_1_1('RESPONCE_PROCESSING', 'HDFC_RTGS_RESPONSE', 'WARN','RTGS_Rsponse_XML_Payload:- ' || rawdata ) INTO rc; 
+		
+	 	END;
+	
+	CREATE PROCEDURE decrypteddata( IN P1 CHARACTER, IN P2 CHARACTER,IN P3 CHARACTER, IN P4 CHARACTER,IN P5 CHARACTER,INOUT P6 CHARACTER)  
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.signdecrypt.decrypteddata";
+ 	
+ 	CREATE PROCEDURE  getsigndata( IN P1 CHARACTER, IN P2 CHARACTER,INOUT P3 CHARACTER, INOUT P4 CHARACTER,INOUT P5 CHARACTER,INOUT P6 CHARACTER,INOUT P7 CHARACTER,INOUT P8 CHARACTER)
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.HDFC_RTGS_OUTWARD_JavaCompute.getSignData";
+END MODULE;

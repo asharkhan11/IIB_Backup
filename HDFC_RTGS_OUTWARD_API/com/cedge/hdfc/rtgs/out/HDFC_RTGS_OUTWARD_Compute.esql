@@ -1,0 +1,155 @@
+BROKER SCHEMA com.cedge.hdfc.rtgs.out
+PATH com.cedge.hdfc.rtgs.out;
+
+CREATE COMPUTE MODULE HDFC_RTGS_OUTWARD_Compute
+	DECLARE PROP_LOC EXTERNAL CHARACTER;
+	DECLARE RequestURL EXTERNAL CHARACTER;
+	DECLARE username EXTERNAL CHARACTER;
+	DECLARE password EXTERNAL CHARACTER;
+	DECLARE Scope EXTERNAL CHARACTER; 
+	DECLARE Grant_Type EXTERNAL CHARACTER; 
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		   CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		DECLARE cbstranrefno CHARACTER;
+		SET cbstranrefno = InputRoot.XMLNSC.faxml.paymentlist.payment.paymentrefno;
+		DECLARE hdfctranrefno CHARACTER;
+--AJ---------		
+		SET hdfctranrefno = OVERLAY(cbstranrefno PLACING '50000' FROM 1 FOR 5);
+--AJ---------
+		DECLARE wholeMsgBlob BLOB ASBITSTREAM(InputRoot.XMLNSC, InputRoot.Properties.Encoding, InputRoot.Properties.CodedCharSetId );
+		DECLARE rc BOOLEAN;	
+		DECLARE jksprivate,p12pass,al,jksfilepublic,pubpass,pubalias,fourBlock,batchnumext,idtxn,reqdatetime,OrgXml CHARACTER; 
+	-----------------------------------------------------------
+		DECLARE bank CHARACTER ; -- 'FCB' 
+		SET bank = Environment.bankName;
+	--------------------------------------------------------------	
+		DECLARE cTime CHARACTER CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'dd-MMM-yyyy HH:mm:ss');
+		DECLARE wholeMsgChar CHAR CAST(wholeMsgBlob AS CHAR CCSID InputRoot.Properties.CodedCharSetId);
+		SET wholeMsgChar = REPLACE(wholeMsgChar,'^M','');	
+		SET wholeMsgChar = REPLACE(wholeMsgChar,'faxml1','xmlns:xsi');
+		SET wholeMsgChar = REPLACE(wholeMsgChar,'faxml2','xsi:noNamespaceSchemaLocation'); 
+--        SET wholeMsgChar = REPLACE(wholeMsgChar,'faxml1','xsi:noNamespaceSchemaLocation');
+--		SET wholeMsgChar = REPLACE(wholeMsgChar,'faxml2','xmlns:xsi'); 
+
+        CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Trsn_Ref_No_converted_from_CBS_To_HDFC :- ' || hdfctranrefno) INTO rc; 
+
+		SET wholeMsgChar = REPLACE(wholeMsgChar,cbstranrefno,hdfctranrefno);
+-- 		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','XML_Message :- ' || wholeMsgChar ) INTO rc; 
+		DECLARE wholeMsgBlob1 BLOB CAST(wholeMsgChar AS BLOB CCSID InputRoot.Properties.CodedCharSetId);
+		
+		CALL getsigndata(PROP_LOC,bank, jksprivate, p12pass,al,jksfilepublic,pubpass,pubalias);
+		SET Environment.jksprivate = jksprivate;
+		SET Environment.p12pass = p12pass;
+		SET Environment.al = al;
+		SET Environment.jksfilepublic = jksfilepublic;
+		SET Environment.pubpass = pubpass;
+		SET Environment.pubalias = pubalias;  
+		
+  		SET fourBlock ='<request>'|| wholeMsgChar||'</request>'; 
+  		
+---------------------------------INSERTING DATA TO DB FOR CALL BACK-------------------------------------------
+		SET batchnumext = InputRoot.XMLNSC.faxml.header.batchnumext;
+		SET idtxn = InputRoot.XMLNSC.faxml.header.idtxn;
+		SET reqdatetime = InputRoot.XMLNSC.faxml.header.reqdatetime;
+		
+--		SET Environment.Result[]=PASSTHRU('select * from HDFC_REST_API_OUTWARD where TRAN_REF_NO = ? ' VALUES(hdfctranrefno)); 
+--		IF NOT EXISTS  (Environment.Result[]) THEN
+				
+--		INSERT INTO Database.HDFC_REST_API_RTGS_OUTWARD (TRAN_REF_NO, XMLREQUEST, PAYMENTTYPE, BATCHNUMEXT, REQDATETIME,CREATION_TIME_STAMP,HDFC_TRAN_REF,BANKNAME) 
+--		VALUES (hdfctranrefno, fourBlock, idtxn, batchnumext, reqdatetime,cTime,cbstranrefno,bank);	
+		
+		
+			UPDATE Database.HDFC_REST_API_RTGS_OUTWARD AS A SET
+			XMLREQUEST =fourBlock,
+			PAYMENTTYPE= idtxn,
+			BATCHNUMEXT =batchnumext,
+			REQDATETIME = reqdatetime,
+			CREATION_TIME_STAMP = cTime,
+			HDFC_TRAN_REF = hdfctranrefno WHERE
+			A.TRAN_REF_NO = Environment.TRAN_REF_NO; 
+		 
+-- 		END IF;  
+			CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Data Updated into HDFC_REST_API_RTGS_OUTWARD Table') INTO rc;
+--------------------------------------------------------------------------------------------------------------  		
+		
+		
+		DECLARE signencrypt,randomencrypt CHARACTER;
+		CALL getsign( fourBlock, Environment.jksprivate,Environment.p12pass,Environment.al,Environment.jksfilepublic,Environment.pubpass,Environment.pubalias,signencrypt,randomencrypt,OrgXml);
+-- 		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Receiving Values to the Encryption method :- ' ||' signencrypt : '||signencrypt||' randomencrypt : '||randomencrypt||' OrgXml : '	||OrgXml)INTO rc;
+		DECLARE sigmsg CHARACTER;
+		SET Environment.signencrypt = signencrypt;
+		SET Environment.randomencrypt = randomencrypt;	
+		SET Environment.TransactionId =hdfctranrefno;  
+		SET Environment.OrgXml =OrgXml; 
+		
+		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Signed XML_Message :- ' || OrgXml ) INTO rc;
+-------------------------------------------CALLING FOR TOKEN GENERATION---------------------------------------	 	  	
+ 		SET OutputLocalEnvironment.Destination.HTTP.RequestURL=RequestURL;
+		SET OutputLocalEnvironment.Destination.HTTP.RequestLine.Method ='POST';
+		SET OutputRoot.HTTPRequestHeader."Content-Type" = 'application/x-www-form-urlencoded';
+		SET OutputRoot.HTTPRequestHeader."Authorization" = 'Basic '||base64Encode(CAST(username||':'||password as BLOB CCSID InputRoot.Properties.CodedCharSetId));  
+		SET OutputLocalEnvironment.Destination.HTTP.QueryString.grant_type = Grant_Type; 
+		SET OutputLocalEnvironment.Destination.HTTP.QueryString.scope = Scope; 
+-------------------------------------------CALLING FOR TOKEN GENERATION---------------------------------------
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','RequestURL :- '||OutputLocalEnvironment.Destination.HTTP.RequestURL ) INTO rc;
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Method :- '||OutputLocalEnvironment.Destination.HTTP.RequestLine.Method ) INTO rc;
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Content-Type :- '||OutputRoot.HTTPRequestHeader."Content-Type" ) INTO rc;   	
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','Authorization :- '||OutputRoot.HTTPRequestHeader.Authorization ) INTO rc;   
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','grant_type:- '||OutputLocalEnvironment.Destination.HTTP.QueryString.grant_type ) INTO rc;   	
+--		CALL log4j_1_1('SIGN_ENCRYPT', 'HDFC_RTGS_OUTWARD', 'WARN','scope:- '||OutputLocalEnvironment.Destination.HTTP.QueryString.scope ) INTO rc;   
+--		
+
+	END; 
+	
+	CREATE PROCEDURE Dcrypt() BEGIN	
+		
+		---------------------------------DCRYPYT--------------------------------------------------------
+        DECLARE randomdata, signeddata, rawdata CHARACTER;	
+        SET signeddata = Environment.signencrypt;
+        SET randomdata = Environment.randomencrypt;	
+    	CALL decrypteddata(Environment.pubpass,Environment.jksprivate,Environment.pubalias,randomdata,signeddata,rawdata);
+	 	SET Environment.Finaldata = rawdata;  
+	 	SET OutputRoot.BLOB.BLOB = CAST(rawdata AS BLOB CCSID InputRoot.Properties.CodedCharSetId); 
+	 	
+--	 	SET OutputRoot.JSON.Data.RequestSignatureEncryptedValue = signencrypt;
+-- 		SET OutputRoot.JSON.Data.SymmetricKeyEncryptedValue = randomencrypt;  
+--		SET OutputRoot.JSON.Data.Scope ='FCAT_FINGROW';   
+
+		------------------------------------------------------------------------------------------------
+		
+	END;	
+	
+	CREATE PROCEDURE  getsigndata( IN P1 CHARACTER, IN P2 CHARACTER,INOUT P3 CHARACTER, INOUT P4 CHARACTER,INOUT P5 CHARACTER,INOUT P6 CHARACTER,INOUT P7 CHARACTER,INOUT P8 CHARACTER)
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.HDFC_RTGS_OUTWARD_JavaCompute.getSignData";
+ 	
+ 	CREATE PROCEDURE getsign( IN P1 CHARACTER, IN P2 CHARACTER,IN P3 CHARACTER, IN P4 CHARACTER,IN P5 CHARACTER,IN P6 CHARACTER,IN P7 CHARACTER,INOUT P8 CHARACTER,INOUT P9 CHARACTER,INOUT P10 CHARACTER)
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.Signatureflow_JavaCompute.signaturedata";
+ 	
+ 	CREATE PROCEDURE decrypteddata( IN P1 CHARACTER, IN P2 CHARACTER,IN P3 CHARACTER, IN P4 CHARACTER,IN P5 CHARACTER,INOUT P6 CHARACTER)  
+ 	LANGUAGE JAVA 
+ 	EXTERNAL NAME "com.cedge.hdfc.rtgs.out.signdecrypt.decrypteddata";
+ 	
+	CREATE PROCEDURE base64Encode(IN source BLOB)
+	RETURNS CHARACTER
+	LANGUAGE JAVA
+	EXTERNAL NAME "com.ibm.broker.javacompute.Base64.encode";
+END MODULE;
+

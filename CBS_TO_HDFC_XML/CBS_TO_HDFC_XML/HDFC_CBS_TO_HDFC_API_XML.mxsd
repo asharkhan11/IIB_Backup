@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:complexType name="faxml">
+    <xsd:sequence>
+      <xsd:element name="header" type="header"/>
+      <xsd:element name="summary" type="summary"/>
+      <xsd:element name="paymentlist" type="paymentlist"/>
+    </xsd:sequence>
+    <xsd:attribute fixed="http://www.w3.org/2001/XMLSchema-instance" name="faxml1" type="xsd:string"> </xsd:attribute>
+    <xsd:attribute fixed="CO_STR.xsd" name="faxml2" type="xsd:string"> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="header">
+    <xsd:sequence>
+      <xsd:element name="extsysname" type="xsd:string"/>
+      <xsd:element name="datpost" type="xsd:string"/>
+            <xsd:element name="batchnumext" type="xsd:string"/>
+            <xsd:element name="idtxn" type="xsd:string"/>
+      <xsd:element name="codcurr" type="xsd:string"/>
+      <xsd:element name="iduser" type="xsd:string"/>
+      <xsd:element name="idcust" type="xsd:string"/>
+      <xsd:element name="groupid" type="xsd:string"/>
+      <xsd:element name="reqdatetime" type="xsd:string"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="summary">
+    <xsd:sequence>
+      <xsd:element name="orgcountpmt" type="xsd:string"/>
+            <xsd:element name="orgsumpmt" type="xsd:string"/>
+        </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="payment">
+    <xsd:sequence>
+      <xsd:element name="stanext" type="xsd:string"/>
+      <xsd:element name="refstan" type="xsd:string"/>
+      <xsd:element name="paymentrefno" type="xsd:string"/>
+      <xsd:element name="accounttype" type="xsd:string"/>
+      <xsd:element name="accountno" type="xsd:string"/>
+      <xsd:element name="ifsccode" type="xsd:string"/>
+      <xsd:element name="txndate" type="xsd:string"/>
+      <xsd:element name="amount" type="xsd:string"/>
+      <xsd:element name="custdet" type="xsd:string"/>
+      <xsd:element name="benefaccountno" type="xsd:string"/>
+      <xsd:element name="benefcustdet" type="xsd:string"/>
+      <xsd:element name="custuniqno" type="xsd:string"/>
+      <xsd:element name="custdetadd1" type="xsd:string"/>
+      <xsd:element name="custdetadd2" type="xsd:string"/>
+            <xsd:element name="exchgnam" type="xsd:string"/>
+            <xsd:element name="exchgadd1" type="xsd:string"/>
+            <xsd:element name="exchgadd2" type="xsd:string"/>
+            <xsd:element name="exchgadd3" type="xsd:string"/>
+            <xsd:element name="clientrefno" type="xsd:string"/>
+            <xsd:element name="paydetail1" type="xsd:string"/>
+      <xsd:element name="forcedebit" type="xsd:string"/>
+            <xsd:element name="beneid" type="xsd:string"/>
+      <xsd:element name="emailid" type="xsd:string"/>
+      <xsd:element name="RemitInformation_1" type="xsd:string"/>
+      <xsd:element name="RemitInformation_2" type="xsd:string"/>
+      <xsd:element name="RemitInformation_3" type="xsd:string"/>
+      <xsd:element name="RemitInformation_4" type="xsd:string"/>
+      <xsd:element name="RemitInformation_5" type="xsd:string"/>
+            <xsd:element name="RemitInformation_6" type="xsd:string"/>
+            <xsd:element name="CoopBankIfscCode" type="xsd:string"/>
+            <xsd:element name="CoopBankCmName" type="xsd:string"/>
+            <xsd:element name="CoopBankCmAcno" type="xsd:string"/>
+            <xsd:element name="CoopBankCmAcctype" type="xsd:string"/>
+            <xsd:element name="CoopBankCmAddress1" type="xsd:string"/>
+            <xsd:element name="CoopBankCmAddress2" type="xsd:string"/>
+            <xsd:element name="advice1" type="xsd:string"/>
+      <xsd:element name="advice2" type="xsd:string"/>
+      <xsd:element name="advice3" type="xsd:string"/>
+      <xsd:element name="advice4" type="xsd:string"/>
+      <xsd:element name="advice5" type="xsd:string"/>
+            <xsd:element name="advice6" type="xsd:string"/>
+      <xsd:element name="advice7" type="xsd:string"/>
+      <xsd:element name="advice8" type="xsd:string"/>
+            <xsd:element name="advice9" type="xsd:string"/>
+      <xsd:element name="advice10" type="xsd:string"/>
+      <xsd:element name="addnlfield1" type="xsd:string"/>
+      <xsd:element name="addnlfield2" type="xsd:string"/>
+      <xsd:element name="addnlfield3" type="xsd:string"/>
+      <xsd:element name="addnlfield4" type="xsd:string"/>
+      <xsd:element name="addnlfield5" type="xsd:string"/>
+            <xsd:element name="paydetail" type="xsd:string"/>
+        </xsd:sequence>
+    </xsd:complexType>
+  <xsd:complexType name="paymentlist">
+    <xsd:sequence>
+      <xsd:element maxOccurs="10" name="payment" type="payment"/>
+        </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="complexType">
+    <xsd:sequence/>
+  </xsd:complexType>
+  <xsd:element name="faxml" type="faxml">
+    <xsd:annotation>
+      <xsd:appinfo source="WMQI_APPINFO">
+        <MRMessage messageDefinition="/0/faxml;XSDElementDeclaration$MRObject"/>
+      </xsd:appinfo>
+    </xsd:annotation>
+  </xsd:element>
+</xsd:schema>

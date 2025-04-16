@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?><mappingRoot xmlns="http://www.ibm.com/2008/ccl/Mapping" domainID="com.ibm.msl.mapping.xml" domainIDExtension="mb" mainMap="true" targetNamespace="com.hdfc.rtgs.out.conversion" version="8.0.5.0" xmlns:map="com.hdfc.rtgs.out.conversion">
+    <inlinedXMLSchema><![CDATA[<?xml version="1.0" encoding="UTF-8"?><xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">          
+    <xsd:element name="groupid" type="xsd:string"/>          
+    <xsd:element name="idcust" type="xsd:string"/>          
+    <xsd:element name="iduser" type="xsd:string"/>          
+</xsd:schema>]]></inlinedXMLSchema>
+    <input path="jar:file://!com/ibm/etools/mft/map/xsds/assembly/Environment.xsd" var="var2"/>
+    <input path="/N06/OUTWARD.xsd" var="var"/>
+    <input inlinedXMLSchema="true" path="../schema_0.xsd" var="var1"/>
+    <input inlinedXMLSchema="true" path="../schema_0.xsd" var="var3"/>
+    <output path="jar:file://!com/ibm/etools/mft/map/xsds/assembly/Environment.xsd" var="var4"/>
+    <output path="/CBS_TO_HDFC_XML/HDFC_CBS_TO_HDFC_API_XML.mxsd" var="var5"/>
+    <imports>
+        <import kind="java" location="com.cedge.hdfc.rtgs.out.mappinglogic.MAPPINGLOGIC1" namespace="xalan://com.cedge.hdfc.rtgs.out.mappinglogic.MAPPINGLOGIC1"/>
+        <import kind="esql" namespace="/com/hdfc/rtgs/date/date.esql"/>
+    </imports>
+    <namespaces>
+        <namespace kind="extension" prefix="fn" uri="http://www.w3.org/2005/xpath-functions"/>
+        <namespace kind="extension" prefix="MAPPINGLOGIC1" uri="xalan://com.cedge.hdfc.rtgs.out.mappinglogic.MAPPINGLOGIC1"/>
+        <namespace kind="extension" prefix="date" uri="/com/hdfc/rtgs/date/date.esql"/>
+    </namespaces>
+    <generation engine="xquery"/>
+    <mappingDeclaration name="CEDGE_R41_TO_HDFC_API_XML">
+        <input path="$var2/mb:env(Environment)" var="Environment">
+            <cast castType="userDefined" path="$Environment/any" qualifier="iduser" ref="var1" var="any"/>
+            <cast castType="userDefined" path="$Environment/any" qualifier="idcust" ref="var1" var="any1"/>
+            <cast castType="userDefined" path="$Environment/any" qualifier="groupid" ref="var1" var="any2"/>
+        </input>
+        <input path="$var/mb:msg(R41,assembly,DFDL,LocalEnvironment,Properties)" var="ComIbmMessageAssembly_R41">
+            <cast path="$ComIbmMessageAssembly_R41/LocalEnvironment/Variables/any" qualifier="Bank_Details" ref="var" var="any3"/>
+        </input>
+        <output path="$var4/mb:env(Environment)" var="Environment1">
+            <cast castType="userDefined" path="$Environment1/any" qualifier="iduser" ref="var1" var="any4"/>
+            <cast castType="userDefined" path="$Environment1/any" qualifier="idcust" ref="var1" var="any5"/>
+            <cast castType="userDefined" path="$Environment1/any" qualifier="groupid" ref="var1" var="any6"/>
+        </output>
+        <output path="$var5/mb:msg(faxml,assembly,XMLNSC,Properties)" var="ComIbmMessageAssembly_faxml"/>
+        <passthrough>
+            <input path="$Environment/."/>
+            <output path="$Environment1/."/>
+            <updates/>
+        </passthrough>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/Properties"/>
+            <output path="$ComIbmMessageAssembly_faxml/Properties"/>
+            <override>
+                <assign value="CBS_TO_HDFC_XML">
+                    <output path="$ComIbmMessageAssembly_faxml/Properties/MessageSet"/>
+                </assign>
+            </override>
+        </move>
+        <expression>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/SENDERS_CORRESPONDENT1" var="SENDERS_CORRESPONDENT1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/RemitInformation_1"/>
+            <code lang="xpath">fn:concat( fn:substring( $SENDERS_CORRESPONDENT1,0 ,4 ),' Bank' )</code>
+        </expression>
+        <assign value="N">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/forcedebit"/>
+            <annotation key="$NON-PERSISTENT" value="2"/>
+        </assign>
+        <assign value="ANDHERI CHANDIVALI MUMBAI 72">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/custdetadd2"/>
+        </assign>
+        <assign value="HDFC BANK">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/custdetadd1"/>
+        </assign>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/TRANSACTIONREFERENCENUMBER" var="TRANSACTIONREFERENCENUMBER1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/custuniqno"/>
+        </move>
+        <function ref="fn:substring">
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/BENEFICIARY_CUSTOMER/LINE2" var="LINE21"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/benefcustdet"/>
+            <param name="sourceString" value="$LINE21"/>
+            <param name="startLocation" value="1"/>
+            <param name="length" value="35"/>
+        </function>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/BENEFICIARY_CUSTOMER/LINE1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/benefaccountno"/>
+        </move>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/RECEIVER_CORRESPONDENT1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/ifsccode"/>
+        </move>
+        <function ref="fn:substring">
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/OREDERING_CUSTOMER/LINE2" var="LINE2"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/custdet"/>
+            <param name="sourceString" value="$LINE2"/>
+            <param name="startLocation" value="1"/>
+            <param name="length" value="10"/>
+        </function>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/OREDERING_CUSTOMER/LINE1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/accountno"/>
+        </move>
+        <assign value="CU">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/accounttype"/>
+        </assign>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/TRANSACTIONREFERENCENUMBER" var="TRANSACTIONREFERENCENUMBER2"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/paymentrefno"/>
+        </move>
+        <assign value="1">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/refstan"/>
+        </assign>
+        <assign value="2">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/stanext"/>
+        </assign>
+        <assign value="1">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/summary/orgcountpmt"/>
+        </assign>
+        <assign value="COAPI">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/extsysname"/>
+        </assign>
+        <assign value="CO_STR">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/idtxn"/>
+        </assign>
+        <assign value="http://www.w3.org/2001/XMLSchema-instance">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/@faxml1"/>
+        </assign>
+        <assign value="CO_STR.xsd">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/@faxml2"/>
+        </assign>
+        <function ref="fn:substring">
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/TRANSACTIONREFERENCENUMBER" var="TRANSACTIONREFERENCENUMBER"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/batchnumext"/>
+            <param name="sourceString" value="$TRANSACTIONREFERENCENUMBER"/>
+            <param name="startLocation" value="11"/>
+            <param name="length" value="7"/>
+        </function>
+        <customFunction lang="esql" ref="date:txndate">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/datpost"/>
+        </customFunction>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/VALUEDATE_CURRENCY_AMOUNT/CURRENCY" var="CURRENCY"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/codcurr"/>
+        </move>
+        <customFunction lang="esql" ref="date:txndate">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/txndate"/>
+        </customFunction>
+        <customFunction lang="esql" ref="date:reqdatetime">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/reqdatetime"/>
+        </customFunction>
+        <customFunction lang="esql" ref="date:amount">
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/VALUEDATE_CURRENCY_AMOUNT/AMOUNT" var="AMOUNT"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/summary/orgsumpmt"/>
+            <param name="amount" value="$AMOUNT"/>
+        </customFunction>
+        <customFunction lang="esql" ref="date:amount">
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/VALUEDATE_CURRENCY_AMOUNT/AMOUNT" var="AMOUNT1"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/amount"/>
+            <param name="amount" value="$AMOUNT1"/>
+        </customFunction>
+        <move>
+            <input path="$Environment/iduser"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/iduser"/>
+        </move>
+        <move>
+            <input path="$Environment/idcust"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/idcust"/>
+        </move>
+        <move>
+            <input path="$Environment/groupid"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/header/groupid"/>
+        </move>
+        <move>
+            <input path="$ComIbmMessageAssembly_R41/R41/Body/TRANSACTIONREFERENCENUMBER"/>
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/clientrefno"/>
+        </move>
+        <assign value="LOAN DISBURSEMENT">
+            <output path="$ComIbmMessageAssembly_faxml/faxml/paymentlist/payment/paydetail"/>
+        </assign>
+    </mappingDeclaration>
+</mappingRoot>

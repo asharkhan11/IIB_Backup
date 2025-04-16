@@ -1,0 +1,174 @@
+
+
+
+
+DECLARE var_path EXTERNAL CHARACTER;
+DECLARE var BOOLEAN;
+
+CREATE COMPUTE MODULE FiDataFetch_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+
+		CALL init_log4j(var_path) INTO var;
+		CALL write_log(MessageFlowLabel,'fi_fetch','INFO','REQUEST : '|| CAST(ASBITSTREAM(InputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;
+		IF CONTAINS(InputRoot.HTTPInputHeader."X-Original-HTTP-Command", 'POST') THEN
+
+			IF FIELDNAME(InputRoot.JSON.Data.[1]) = 'bankId' AND FIELDNAME(InputRoot.JSON.Data.[2]) = 'accNo' AND FIELDNAME(InputRoot.JSON.Data.[3]) = 'dataTypes' AND FIELDNAME(InputRoot.JSON.Data.[4]) = 'fromDate' AND FIELDNAME(InputRoot.JSON.Data.[5]) = 'toDate' AND InputRoot.JSON.Data.[6] IS NULL THEN
+
+
+
+				DECLARE r ROW;
+				DECLARE dsn CHARACTER '';
+				DECLARE schema_name CHARACTER '';
+
+				SET r.data[] = SELECT t.dsn, t.schema_name FROM Database.ORADSN.SYSTEM.DSN AS t
+				WHERE t.bank_id = InputRoot.JSON.Data.bankId;
+
+				IF r.data.[1] IS NULL THEN
+					SET OutputRoot.JSON.Data.response = 'Invalid Bank ID';
+				ELSE
+					SET dsn = r.data[1].dsn;
+					SET schema_name = r.data[1].schema_name;
+					SET r = NULL;
+
+					DECLARE startDate DATE InputRoot.JSON.Data.fromDate;
+					DECLARE endDate DATE InputRoot.JSON.Data.toDate;
+					DECLARE accNo CHARACTER InputRoot.JSON.Data.accNo;
+					DECLARE bankId CHARACTER InputRoot.JSON.Data.bankId;
+
+					DECLARE query CHARACTER '
+					SELECT
+					p.account_type, p.ownership_type, p.customer_name, p.date_of_birth,
+					p.phone_number, p.email, p.address, p.kyc_status,
+					s.bank_name, p.current_balance, p.currency,
+					s.branch_name, s.branch_code, s.ifsc_code, s.baddress,
+					t.transaction_id, t.transaction_type, t.amount,
+					t.transaction_date, t.description
+					FROM profile p
+					JOIN transaction t ON p.account_number = t.account_number
+					JOIN bank_summary s ON p.bank_id = s.bank_id
+					WHERE t.transaction_date >= ?
+					AND t.transaction_date <= ?
+					AND p.account_number IN (
+					SELECT DISTINCT t.account_number
+					FROM transaction t INNER JOIN profile p on t.profile_id = p.profile_id
+					WHERE t.transaction_date BETWEEN ? AND ? AND t.account_number = ? AND p.bank_id = ?
+					)
+					ORDER BY t.transaction_date;
+					';
+
+					SET r.data[] = PASSTHRU(query TO Database.{dsn} VALUES(startDate, endDate, startDate, endDate, accNo, bankId));
+
+					IF r.data.[1] IS NULL THEN
+						SET OutputRoot.JSON.Data.response = 'No transactions for given data';
+					ELSE
+
+
+						DECLARE inRef REFERENCE TO r.data[1];
+						CREATE LASTCHILD OF OutputRoot.JSON.Data NAME('BankId') VALUE(InputRoot.JSON.Data.bankId);
+						CREATE LASTCHILD OF OutputRoot.JSON.Data NAME('AccountType') VALUE(r.data[1].ACCOUNT_TYPE);
+						-- ----------------- PROFILE ------------------
+						CREATE LASTCHILD OF OutputRoot.JSON.Data IDENTITY(JSON.Array)Profile;
+						DECLARE profileRef REFERENCE TO OutputRoot.JSON.Data.Profile;
+
+						DECLARE i INTEGER 1;
+						DECLARE totalHolders INTEGER CARDINALITY(r.data[]);
+						DECLARE holderCount INTEGER 1;
+						-- Create a list to track unique customer names
+						DECLARE uniqueNames CHARACTER '';
+
+						WHILE i <= totalHolders DO
+							DECLARE name CHARACTER TRIM(r.data[i].CUSTOMER_NAME);
+							-- Check if name already exists in uniqueNames string
+							IF POSITION(',' || name || ',' IN ',' || uniqueNames || ',') = 0 THEN
+								SET uniqueNames = uniqueNames || ',' || name;
+
+								CREATE LASTCHILD OF profileRef NAME 'Holder';
+								SET profileRef.Holder[holderCount].HolderType = r.data[i].OWNERSHIP_TYPE;
+								SET profileRef.Holder[holderCount].HolderName = r.data[i].CUSTOMER_NAME;
+								SET profileRef.Holder[holderCount].DOB = r.data[i].DATE_OF_BIRTH;
+								SET profileRef.Holder[holderCount].mobile = r.data[i].PHONE_NUMBER;
+								SET profileRef.Holder[holderCount].email = r.data[i].EMAIL;
+								SET profileRef.Holder[holderCount].address = r.data[i].ADDRESS;
+								SET profileRef.Holder[holderCount].kycStatus = r.data[i].KYC_STATUS;
+
+								SET holderCount = holderCount + 1;
+							END IF;
+
+							SET i = i + 1;
+						END WHILE;
+						-- ----------------- SUMMARY ------------------
+						CREATE LASTCHILD OF OutputRoot.JSON.Data NAME('Summary');
+						DECLARE summRef REFERENCE TO OutputRoot.JSON.Data.Summary;
+
+						SET summRef.bankName = r.data[1].BANK_NAME;
+						SET summRef.currentBalance = r.data[1].CURRENT_BALANCE;
+						SET summRef.currency = r.data[1].CURRENCY;
+						SET summRef.balanceDateTime = CURRENT_TIMESTAMP;
+						SET summRef.type = r.data[1].ACCOUNT_TYPE;
+						SET summRef.branch = r.data[1].BRANCH_NAME;
+						SET summRef.branchCode = r.data[1].BRANCH_CODE;
+						SET summRef.ifscCode = r.data[1].IFSC_CODE;
+						SET summRef.branchAddress = r.data[1].BADDRESS;
+						-- ----------------- TRANSACTIONS ------------------
+						CREATE LASTCHILD OF OutputRoot.JSON.Data IDENTITY(JSON.Array)Transactions;
+						DECLARE trRef REFERENCE TO OutputRoot.JSON.Data.Transactions;
+
+						SET trRef.Date.startDate = InputRoot.JSON.Data.fromDate;
+						SET trRef.Date.endDate = InputRoot.JSON.Data.toDate;
+
+						DECLARE txnIndex INTEGER 1;
+						SET i = 1;
+
+						WHILE i <= totalHolders DO
+							IF r.data[i].TRANSACTION_ID IS NOT NULL THEN
+								CREATE LASTCHILD OF trRef NAME 'Transaction';
+								SET trRef.Transaction[txnIndex].txnId = r.data[i].TRANSACTION_ID;
+								SET trRef.Transaction[txnIndex].type = r.data[i].TRANSACTION_TYPE;
+								SET trRef.Transaction[txnIndex].amount = r.data[i].AMOUNT;
+								SET trRef.Transaction[txnIndex].currentBalance = r.data[i].CURRENT_BALANCE;
+								SET trRef.Transaction[txnIndex].transactionDate = r.data[i].TRANSACTION_DATE;
+								SET trRef.Transaction[txnIndex].description = r.data[i].DESCRIPTION;
+
+								SET txnIndex = txnIndex + 1;
+							END IF;
+							SET i = i + 1;
+						END WHILE;
+
+					END IF;
+				END IF;
+				CALL write_log(MessageFlowLabel,'fi_fetch','INFO','RESPONSE : '|| CAST(ASBITSTREAM(OutputRoot.JSON.Data)AS CHARACTER CCSID 1208)) INTO var;
+
+			ELSE
+				SET OutputRoot.JSON.Data.response = 'Input Request is Invalid';
+				CALL write_log(MessageFlowLabel,'fi_fetch','INFO',' ------------------------START----------------------') INTO var;
+				CALL write_log(MessageFlowLabel,'fi_fetch','ERROR','Input Request is Invalid. INPUT DATA : ' || CAST(ASBITSTREAM(InputRoot.JSON.Data) as CHARACTER CCSID 1208)) INTO var;
+				CALL write_log(MessageFlowLabel,'fi_fetch','INFO',' ------------------------END----------------------') INTO var;
+			END IF;
+
+
+		ELSE
+
+			SET OutputRoot.JSON.Data.response = 'Invalid HTTP method';
+			CALL write_log(MessageFlowLabel,'fi_fetch','INFO',' ------------------------START----------------------') INTO var;
+			CALL write_log(MessageFlowLabel,'fi_fetch','ERROR','Invalid HTTP method') INTO var;
+			CALL write_log(MessageFlowLabel,'fi_fetch','INFO',' ------------------------END----------------------') INTO var;
+
+		END IF;
+	END;
+END MODULE;
+
+
+CREATE FUNCTION init_log4j (IN var_path CHARACTER) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.initLog4j";
+
+
+CREATE PROCEDURE write_log ( in mfname CHARACTER, in logger_name CHARACTER, in level CHARACTER, in data CHARACTER ) RETURNS BOOLEAN
+LANGUAGE JAVA
+EXTERNAL NAME "com.ibm.broker.IAM3.Log4jNode.log";
